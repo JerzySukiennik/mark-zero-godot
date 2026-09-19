@@ -19,7 +19,10 @@ func _ready() -> void:
 	stage.name = "Stage"
 	add_child(stage)
 	_sky()
-	Net.peers_changed.connect(_sync_suits)
+	# DEFERRED. Switching hero frees the entity whose own menu emitted the change, from
+	# inside that signal; rebuilding the roster on the next idle frame keeps the teardown
+	# and the rebuild from overlapping.
+	Net.peers_changed.connect(func(): call_deferred("_sync_suits"))
 	_sync_suits()
 	print("[mark zero] ready — %d suit(s), camera %s" % [
 		suits.size(), "yes" if get_viewport().get_camera_3d() != null else "NONE"])

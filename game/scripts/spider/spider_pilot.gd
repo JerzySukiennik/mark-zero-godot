@@ -183,7 +183,7 @@ func _targets() -> Array:
 	return out
 
 func _hand_point(hand: String) -> Vector3:
-	var name := "piv_palm" + hand
+	var name := "piv_palm" + SuitRig.SIDE[hand]
 	if skel != null and skel.has_pivot(name):
 		return (skel.pivots[name] as Node3D).global_position
 	return model.position
@@ -248,13 +248,14 @@ func _pose(_delta: float) -> void:
 		var reach: float = maxf(th, hold)
 		if reach <= 0.001:
 			continue
-		skel.add_offset("piv_shoulder" + hand, Poses.X_AX, -1.25 * reach)
-		skel.add_offset("piv_elbow" + hand, Poses.X_AX, -0.7 * reach)
+		var side: String = SuitRig.SIDE[hand]
+		skel.add_offset("piv_shoulder" + side, Poses.X_AX, -1.25 * reach)
+		skel.add_offset("piv_elbow" + side, Poses.X_AX, -0.7 * reach)
 		# THE THWIP. Two fingers folded to the palm, and it is one clean rotation because
 		# the model was authored for exactly that. It snaps shut with the throw and relaxes
 		# while the web is held, so a hand carrying a rope is not still mid-gesture.
 		var fold: float = maxf(th, hold * 0.45)
-		skel.add_offset("piv_fingers" + hand, Poses.X_AX, THWIP_ANGLE * fold)
+		skel.add_offset("piv_fingers" + side, Poses.X_AX, THWIP_ANGLE * fold)
 
 	# Hanging, the legs tuck and trail. A figure on a rope with its legs straight down is a
 	# plumb bob, and reads as one.

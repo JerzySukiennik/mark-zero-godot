@@ -53,5 +53,29 @@ func _initialize() -> void:
 		[wander.x, wander.y, wander.z])
 	_ok(drift < 8.0, "but it does not float away (%.2f m from where it started)" % drift)
 	_ok(sh_hi - sh_lo > 0.8, "the arms answer the corrections: %.2f deg of shoulder" % (sh_hi - sh_lo))
+	# THE BOOTS. Holding station is the most expensive thing a repulsor does, so the
+	# exhaust must be at its brightest — and thrust_mag is what every effect reads. It sat
+	# at zero through the whole hover, because holding station is exactly when the sticks
+	# are asking for nothing, and the suit hung in the air with four dark boots.
+	_ok(m.thrust_mag >= FlightModel.HOVER_BURN,
+		"the boots are lit while holding station (%.2f)" % m.thrust_mag)
+
+	# And a takeoff has to clear the plate rather than hop.
+	var t := FlightModel.new()
+	t.set_armor("mk3")
+	t.position = Vector3(0, 1.0, 0)
+	for i in 30:
+		t.step(STEP, _cmd())
+	_ok(t.grounded, "a suit left alone stays on the plate")
+	t.velocity.y = FlightModel.TAKEOFF_KICK
+	t.grounded = false
+	var peak := 0.0
+	for i in 240:
+		var c := _cmd()
+		t.step(STEP, c)
+		peak = maxf(peak, t.position.y - 1.0)
+	_ok(peak > 2.0, "a takeoff kick clears the ground properly (%.1f m)" % peak)
+	_ok(not t.grounded, "and it does not fall straight back down")
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	quit(1 if bad > 0 else 0)

@@ -62,7 +62,10 @@ var _nav_cool := 0.0
 var _open := false
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# TOP-LEFT, not FULL_RECT. Full-rect anchors inside a SubViewport left this at size
+	# ZERO and then overrode any explicit size set afterwards, so the panel drew into a
+	# zero-wide rect in the corner. Visor._fit owns the size now; the anchors stay out of it.
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	visible = false
 

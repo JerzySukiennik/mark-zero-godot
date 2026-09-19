@@ -56,7 +56,7 @@ func step(delta: float, cmd: Dictionary, rope: Vector3) -> void:
 		# swing you are riding and one that is happening to you.
 		var ask: Vector2 = cmd.get("walk", Vector2.ZERO)
 		if ask.length() > 0.08:
-			var dir := basis_ * Vector3(ask.x, 0.0, -ask.y)
+			var dir := basis_ * Vector3(ask.x, 0.0, ask.y)
 			dir.y = 0.0
 			if dir.length_squared() > 1e-6:
 				a += dir.normalized() * AIR_STEER
@@ -95,7 +95,7 @@ func _walk(delta: float, cmd: Dictionary) -> void:
 	var mag := clampf(ask.length(), 0.0, 1.0)
 	var want := Vector3.ZERO
 	if mag > 0.08:
-		var dir := basis_ * Vector3(ask.x, 0.0, -ask.y)
+		var dir := basis_ * Vector3(ask.x, 0.0, ask.y)
 		dir.y = 0.0
 		if dir.length_squared() > 1e-6:
 			var gear: float = (WALK_SPEED * mag / WALK_GEAR if mag < WALK_GEAR

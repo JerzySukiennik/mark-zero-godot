@@ -92,8 +92,10 @@ func build() -> void:
 func attach(rig: SuitRig) -> void:
 	_rig = rig
 	_origin = null
-	if rig != null and rig.has_pivot("piv_palmR"):
-		_origin = rig.pivots["piv_palmR"]
+	# Same side correction as the turret: the right forearm as the PLAYER sees it.
+	var mount: String = "piv_palm" + SuitRig.SIDE["R"]
+	if rig != null and rig.has_pivot(mount):
+		_origin = rig.pivots[mount]
 
 var ready_to_fire: bool:
 	get: return not active and charge >= CHARGE_COST and _origin != null

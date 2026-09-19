@@ -57,9 +57,13 @@ func attach(rig: SuitRig) -> void:
 	if _mount != null and is_instance_valid(_mount):
 		_mount.queue_free()
 	_mount = null
-	if rig == null or not rig.has_pivot("piv_shoulderR"):
+	# The RIGHT shoulder as the player sees it, which the models call L — see SuitRig.SIDE.
+	# It was mounting on the model's own R and therefore popping out of the shoulder on the
+	# left of the screen, which is not where anyone has ever seen it.
+	var mount: String = "piv_shoulder" + SuitRig.SIDE["R"]
+	if rig == null or not rig.has_pivot(mount):
 		return
-	var shoulder: Node3D = rig.pivots["piv_shoulderR"]
+	var shoulder: Node3D = rig.pivots[mount]
 
 	_mount = Node3D.new()
 	_mount.name = "TurretMount"

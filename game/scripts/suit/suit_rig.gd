@@ -24,6 +24,23 @@ const PIVOT_PARENT := {
 	"piv_reactor": "piv_hips",
 }
 
+## WHICH PIVOT IS ON THE PLAYER'S RIGHT.
+##
+## Named separately from the model because the two disagree. assets/suits/CONTRACT.md says
+## "+X is the character's LEFT" and every model obeys it — but the same contract has the
+## figure facing -Z, and an entity facing -Z has its own right at +X, which is the
+## convention Godot itself uses for a camera. So the pivot called `piv_palmL` sits on the
+## character's anatomical RIGHT, and pressing R1 fired out of the hand on the left of the
+## screen.
+##
+## Rather than rename twenty pivots across five shipped models, the disagreement is
+## declared once, here, and everything that cares about sides asks. tools/test_sides.gd
+## measures it through the real camera rather than trusting this comment.
+const SCREEN_RIGHT_PALM := "piv_palmL"
+
+## Maps a BUTTON side ("R" or "L") to the model's own suffix.
+const SIDE := { "R": "L", "L": "R" }
+
 static func _d(x: float, y: float, z: float) -> Vector3:
 	return Vector3(x, y, z).normalized()
 

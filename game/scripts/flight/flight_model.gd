@@ -95,6 +95,9 @@ const HOVER_DAMPING := 0.55
 const HOVER_STIFFNESS := 3.2
 ## How hard the air pushes it around while hovering.
 const TURBULENCE := 1.35
+## What the exhaust reads as while the suit is simply holding station. Not zero: standing
+## still in the air is the single most expensive thing a repulsor does.
+const HOVER_BURN := 0.55
 
 ## ---- on foot ---------------------------------------------------------------------------
 ## Until now the suit had no ground locomotion at all: _resolve_ground clamped Y and that
@@ -260,6 +263,12 @@ func step(delta: float, cmd: Dictionary) -> void:
 ## Walking and running, which only exist while both feet are down and the thrusters are
 ## idle. The moment the suit lights up it is flying again and this does nothing: an armour
 ## that keeps jogging while its boots are burning is two locomotion systems fighting.
+## TAKEOFF IS A COMMITMENT, not a jump. Once the boots light on the ground the suit leaves
+## it properly: a firm kick clear of the plate so the hover stabiliser has room to take
+## over, instead of the quarter-second of reduced gravity it used to manage before settling
+## back down. Jurek: "on po prostu podskakuje w zmniejszonej grawitacji".
+const TAKEOFF_KICK := 7.5
+
 func _walk(delta: float, cmd: Dictionary) -> void:
 	if not grounded or thrust_mag > 0.1:
 		ground_speed = 0.0
@@ -270,9 +279,11 @@ func _walk(delta: float, cmd: Dictionary) -> void:
 
 	var want := Vector3.ZERO
 	if mag > 0.08:
-		# Stick up is forward, and forward is wherever the suit is facing — the camera sits
-		# behind it, so the two agree without the player having to think about it.
-		var dir := basis_ * Vector3(ask.x, 0.0, -ask.y)
+		# Stick up is forward, and forward is wherever the suit is facing. The pad reports
+		# UP as a NEGATIVE y — which is also the sign of forward in Godot — so the stick
+		# goes in unchanged. Negating it, which looks like the obvious thing to do, walked
+		# the suit backwards: "do przodu jest do tylu".
+		var dir := basis_ * Vector3(ask.x, 0.0, ask.y)
 		dir.y = 0.0
 		if dir.length_squared() > 1e-6:
 			var gear: float = (WALK_SPEED * mag / WALK_GEAR if mag < WALK_GEAR
@@ -353,6 +364,16 @@ func _hover(delta: float, cmd: Dictionary) -> Vector3:
 	# steer, so it cancels its own weight and then corrects around that.
 	var hold := Vector3(0, G * spec.mass, 0)
 	var world_extra := hold + (turb + servo) * spec.mass * 0.45
+	# THE BOOTS ARE ON. A hovering suit is carrying its whole weight on its repulsors, so
+	# the exhaust is at its brightest, and thrust_mag is what every effect reads to decide
+	# how hard to burn. It was left at whatever the sticks asked for — zero, because holding
+	# station is precisely when nothing is being asked for — so the suit hung in the air
+	# with four dark boots. Jurek: "po prostu lewituje".
+	#
+	# Scaled by how hard the servo is working on top of the weight, so drifting and
+	# correcting flickers the jets instead of holding one flat glow.
+	thrust_mag = maxf(thrust_mag, HOVER_BURN + clampf(servo.length() / 12.0, 0.0, 0.35))
+
 	# Handed back in body axes, because `f` is a body-frame force at this point.
 	var body_extra := basis_.inverse() * world_extra
 

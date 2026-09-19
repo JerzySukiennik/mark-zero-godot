@@ -42,7 +42,10 @@ var _aiming := 0.0
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	# TOP-LEFT, not FULL_RECT. Full-rect anchors inside a SubViewport left this at size
+	# ZERO and then overrode any explicit size set afterwards, so the panel drew into a
+	# zero-wide rect in the corner. Visor._fit owns the size now; the anchors stay out of it.
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
 
 ## Fed every frame by the suit.
 func feed(delta: float, look: Vector2, speed: float, hp: float, aiming: bool) -> void:

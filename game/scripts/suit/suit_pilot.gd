@@ -190,6 +190,11 @@ func _step_local(delta: float) -> void:
 	# flight controls stand down entirely until something asks it into the air. X, R2 and
 	# any real deflection of the stick while already flying all count as asking.
 	var on_foot := model.grounded and not Pad.pressed("up")
+	# The instant X is pressed with both feet down, kick clear of the plate. Without it the
+	# climb rate alone has to fight a full g from a standing start, which reads as a hop.
+	if model.grounded and Pad.just_pressed("up"):
+		model.velocity.y = maxf(model.velocity.y, FlightModel.TAKEOFF_KICK)
+		model.grounded = false
 
 	var stick_fwd := 0.0 if on_foot else -move.y
 
@@ -291,8 +296,9 @@ func _drive_shot_arms(delta: float) -> void:
 		# Reach holds the arm at the target; kick is the recoil going back through the
 		# shoulder and dies almost immediately, so the two read as one punch.
 		var kick: float = SHOT_KICK * r * r * r
-		skel.add_offset("piv_shoulder" + hand, Poses.X_AX, -SHOT_REACH * r + kick)
-		skel.add_offset("piv_elbow" + hand, Poses.X_AX, -0.45 * r)
+		var side: String = SuitRig.SIDE[hand]
+		skel.add_offset("piv_shoulder" + side, Poses.X_AX, -SHOT_REACH * r + kick)
+		skel.add_offset("piv_elbow" + side, Poses.X_AX, -0.45 * r)
 
 ## RAPID-PRESS, NOT HOLD. Jurek's rule, from Marvel's Spider-Man: while aiming you tap R1
 ## and L1 as fast as you can and each tap is a shot. So these are just-pressed edges rather
@@ -304,7 +310,10 @@ func _shoot(aiming: bool) -> void:
 	for hand: String in ["R", "L"]:
 		if not Pad.just_pressed("fire_" + hand.to_lower()):
 			continue
-		var pivot_name: String = "piv_palm" + hand
+		# SuitRig.SIDE, not `hand`: the models name their sides from the opposite
+		# convention to the one the game flies in, so piv_palmL is the hand on the RIGHT of
+		# the screen. Measured in tools/test_sides.gd through the real camera.
+		var pivot_name: String = "piv_palm" + SuitRig.SIDE[hand]
 		if not skel.has_pivot(pivot_name):
 			continue
 		var muzzle: Vector3 = (skel.pivots[pivot_name] as Node3D).global_position
