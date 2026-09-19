@@ -65,6 +65,37 @@ var boost_active := 0.0
 var _boost_t := 0.0
 var ground_y := 0.0                ## set by the owner each step from the world
 
+## ---- HOVERING IS A FIGHT, NOT A STATE ----------------------------------------------
+##
+## A suit parked in the air reads as levitating — a statue on an invisible pole — because
+## nothing is happening to it. Jurek: "teraz w grze po prostu lewituje, a powinien być żywy
+## i korygować."
+##
+## The cure is NOT to animate a wobble. A sine wave looks mechanical precisely because
+## nothing causes it, and the eye is very good at telling a driven motion from a decorative
+## one. So the suit is DISTURBED and then CORRECTS: a slow wandering force pushes it off
+## station, a servo pushes back, and the servo is deliberately under-damped so it overshoots
+## slightly and has to come back. The visible result is a machine holding its place by
+## working at it, which is what the reference footage shows and what a real stabilised
+## aircraft does.
+##
+## Everything downstream gets this for free: poses.js reads the correction the servo is
+## applying and swings the arms to counter it, so the limbs move BECAUSE the body was pushed.
+var hover_anchor := Vector3.ZERO
+var hover_active := false
+## The force the stabiliser is applying right now, body axes, normalised roughly to -1..1.
+## The pose system drives the arms off this.
+var hover_correction := Vector3.ZERO
+var _turb_t := 0.0
+
+## How far it is allowed to wander before the servo really insists, in metres.
+const HOVER_SLACK := 0.55
+## Under-damped on purpose: at 1.0 it would glide to a stop and look dead again.
+const HOVER_DAMPING := 0.55
+const HOVER_STIFFNESS := 3.2
+## How hard the air pushes it around while hovering.
+const TURBULENCE := 1.35
+
 ## Derived drag constants, rebuilt whenever the armour changes.
 var _k_fwd := 0.0
 var _k_lat := 0.0
@@ -189,6 +220,9 @@ func step(delta: float, cmd: Dictionary) -> void:
 		var lift := _lift_k * rho * vmag * vmag * sin(2.0 * alpha) * (fwd_comp / vmag)
 		f.y += clampf(lift, -3.0 * spec.mass * G, 3.0 * spec.mass * G)
 
+	# ---- station keeping, while hovering -------------------------------------------------
+	f += _hover(delta, cmd)
+
 	# ---- integrate ----------------------------------------------------------------------
 	var world_f := basis_ * f
 	world_f.y -= G * spec.mass
@@ -198,6 +232,71 @@ func step(delta: float, cmd: Dictionary) -> void:
 	velocity += accel * delta
 	position += velocity * delta
 	_resolve_ground()
+
+## Hold a point in the air, badly enough to be interesting.
+## RETURNS the force to add, rather than taking `f` and modifying it. Vector3 is a VALUE
+## type in GDScript, so a function that takes one and adds to it is quietly editing a copy
+## that is discarded on return — the stabiliser ran correctly, published its corrections,
+## moved the arms, and applied exactly no force at all. The suit fell 119 m in fifteen
+## seconds while faithfully pretending to hold station.
+func _hover(delta: float, cmd: Dictionary) -> Vector3:
+	var asking: float = absf(cmd.get("thrust", 0.0)) + absf(cmd.get("lateral", 0.0)) \
+		+ absf(cmd.get("vertical", 0.0)) + absf(cmd.get("retro", 0.0))
+	# HOVERING IS THE DEFAULT AIRBORNE STATE, not a special slow-speed case.
+	#
+	# The first cut required the suit to already be slow, which never happened: let go of the
+	# stick in mid-air and it fell, and falling is not slow, so the stabiliser never engaged
+	# and it dropped 119 m in fifteen seconds. That is a helicopter losing power, not Iron
+	# Man. In every reference he stops and STAYS — stopping in the air is the whole point of
+	# the machine.
+	#
+	# So: airborne and not being asked to go anywhere means hold station, whatever the
+	# current speed. The auto-brake kills the speed and this holds what is left.
+	var want := not grounded and asking < 0.15
+	if not want:
+		hover_active = false
+		hover_correction = hover_correction.lerp(Vector3.ZERO, 1.0 - exp(-delta / 0.25))
+		return Vector3.ZERO
+	if not hover_active:
+		hover_active = true
+		hover_anchor = position
+
+	_turb_t += delta
+	# Three incommensurate frequencies per axis. This is the DISTURBANCE, not the motion —
+	# what you actually see is the servo's answer to it, which is a different shape and a
+	# different rhythm from the sines that caused it.
+	var turb := Vector3(
+		sin(_turb_t * 0.41) * 0.6 + sin(_turb_t * 1.13 + 2.0) * 0.4,
+		sin(_turb_t * 0.29 + 1.1) * 0.7 + sin(_turb_t * 0.87) * 0.3,
+		sin(_turb_t * 0.53 + 0.4) * 0.6 + sin(_turb_t * 1.31 + 3.3) * 0.4
+	) * TURBULENCE
+
+	# The servo. Spring towards the anchor, damped — but under-damped, so it arrives with
+	# something left over and has to come back. That overshoot is the whole effect.
+	var err := hover_anchor - position
+	# Inside the slack it barely tries, which is what stops it looking magnetically pinned.
+	var pull := err * HOVER_STIFFNESS
+	if err.length() < HOVER_SLACK:
+		pull *= err.length() / HOVER_SLACK
+	var servo := pull - velocity * HOVER_DAMPING * 2.0
+
+	# CARRY THE WEIGHT. Position error alone cannot hold anything up — gravity is applied
+	# after this and would win every time, which is why the first version sank while
+	# faithfully correcting its horizontal position. The stabiliser has to lift as well as
+	# steer, so it cancels its own weight and then corrects around that.
+	var hold := Vector3(0, G * spec.mass, 0)
+	var world_extra := hold + (turb + servo) * spec.mass * 0.45
+	# Handed back in body axes, because `f` is a body-frame force at this point.
+	var body_extra := basis_.inverse() * world_extra
+
+	# Published for the pose system, roughly normalised so the arms' response is the same
+	# size whichever armour is worn.
+	# Only the CORRECTION is published, not the weight it is carrying: the arms should answer
+	# the wobble, not lean permanently because the suit is holding itself up.
+	var corr_world := (turb + servo) * 0.45
+	hover_correction = hover_correction.lerp(
+		basis_.inverse() * corr_world / 9.0, 1.0 - exp(-delta / 0.08))
+	return body_extra
 
 func _rotate(delta: float, cmd: Dictionary) -> void:
 	var look: Vector2 = cmd.get("look", Vector2.ZERO)

@@ -134,6 +134,38 @@ func _drive(delta: float, model: FlightModel, cmd: Dictionary, rig: SuitRig) -> 
 	rig.add_offset("piv_neck", Y_AX, clampf(-look.x * 6.0, -0.30, 0.30))
 	rig.add_offset("piv_neck", X_AX, clampf(look.y * 4.0, -0.22, 0.22))
 
+	# HOLDING STATION. The flight model publishes what its stabiliser is doing this instant
+	# (see FlightModel._hover), and the limbs answer it. This is the difference between a
+	# suit that levitates and one that is visibly working to stay put: the arms move BECAUSE
+	# the body was pushed, on the body's rhythm, not on a timer of their own.
+	#
+	# Counter-intuitively the arms swing WITH the correction, not against it. A stabilised
+	# aircraft points its thrust where it needs to go, and a hovering man does the same with
+	# his hands — the palms are the control surfaces, so they lead the recovery rather than
+	# bracing against it.
+	var hov: float = blend["hover"]
+	if hov > 0.02:
+		var corr := model.hover_correction
+		var gain := hov * 0.55
+		# Sideways correction rolls both shoulders the same way — the whole body leans into
+		# the save, which is what makes it read as balance rather than as flapping.
+		rig.add_offset("piv_shoulderL", Z_AX, -corr.x * gain)
+		rig.add_offset("piv_shoulderR", Z_AX, -corr.x * gain)
+		# Fore-and-aft correction opens or closes the arms.
+		rig.add_offset("piv_shoulderL", X_AX, corr.z * gain * 0.8)
+		rig.add_offset("piv_shoulderR", X_AX, corr.z * gain * 0.8)
+		# Vertical is the palms: they are what is holding him up, so they take the load.
+		rig.add_offset("piv_elbowL", X_AX, -corr.y * gain * 0.5)
+		rig.add_offset("piv_elbowR", X_AX, -corr.y * gain * 0.5)
+		# The legs trail the save a beat later, which is what stops the whole body moving as
+		# one rigid piece.
+		rig.add_offset("piv_hipL", X_AX, corr.z * gain * 0.35)
+		rig.add_offset("piv_hipR", X_AX, corr.z * gain * 0.35)
+		# And the head stays level against it — a stabilised head on a moving body is the
+		# oldest trick there is for making something look alive rather than driven.
+		rig.add_offset("piv_neck", Z_AX, corr.x * gain * 0.6)
+		rig.add_offset("piv_neck", X_AX, -corr.z * gain * 0.4)
+
 	# THE IDLE. Correct and perfectly still is a statue. Three slow incommensurate wobbles
 	# cost nothing and keep the armour alive between manoeuvres; the frequencies are
 	# deliberately unrelated so it never settles into a visible loop.
