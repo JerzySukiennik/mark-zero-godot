@@ -114,12 +114,29 @@ func _drive(delta: float, model: FlightModel, cmd: Dictionary, rig: SuitRig) -> 
 	rig.add_offset("piv_shoulderR", X_AX, arm_trail + sweep)
 
 	# The skier: through a slide the OUTSIDE arm opens and the inside one tucks. This is the
-	# asymmetry that stops a turn looking like a rigid object being rotated.
-	rig.add_offset("piv_shoulderL", Z_AX, -slide * 0.26)
-	rig.add_offset("piv_shoulderR", Z_AX, slide * 0.26)
+	# asymmetry that stops a turn looking like a rigid object being rotated, and at 0.26 it
+	# was too faint to read at all — a suit sliding sideways looked exactly like a suit
+	# hanging still. It also now drives the ELBOWS and the legs, because a real turn is the
+	# whole body committing to it rather than two shoulders moving politely.
+	rig.add_offset("piv_shoulderL", Z_AX, -slide * 0.58)
+	rig.add_offset("piv_shoulderR", Z_AX, slide * 0.58)
+	# The inside arm folds in towards the chest; the outside one reaches away. Which is
+	# which flips with the direction, which is what the signed max is doing.
+	rig.add_offset("piv_elbowL", X_AX, -maxf(0.0, slide) * 0.45)
+	rig.add_offset("piv_elbowR", X_AX, -maxf(0.0, -slide) * 0.45)
+	# The legs trail out of the turn, the way they do behind a motorbike leaning over.
+	rig.add_offset("piv_hipL", Z_AX, -slide * 0.22)
+	rig.add_offset("piv_hipR", Z_AX, slide * 0.22)
+	# And he looks WHERE HE IS GOING. A head locked forward through a sideways slide is the
+	# clearest possible sign that the body is being dragged rather than steering.
+	rig.add_offset("piv_neck", Z_AX, slide * 0.14)
+	rig.add_offset("piv_chest", Z_AX, -slide * 0.12)
 
 	# Elbows bend in a hover and under braking, dead straight at cruise.
-	var bend: float = (blend["hover"] * 0.55 + blend["brake"] * 0.85 + blend["stand"] * 0.2) * 0.9
+	# Hover's share used to be 0.55, which folded the elbows a further thirty degrees on top
+	# of an already-tucked pose — the arms never came anywhere near straight. A hovering man
+	# has straight arms; it is BRAKING that bends them.
+	var bend: float = (blend["hover"] * 0.10 + blend["brake"] * 0.85 + blend["stand"] * 0.2) * 0.9
 	rig.add_offset("piv_elbowL", X_AX, -bend)
 	rig.add_offset("piv_elbowR", X_AX, -bend)
 

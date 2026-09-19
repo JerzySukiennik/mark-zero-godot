@@ -258,7 +258,10 @@ func _step_local(delta: float) -> void:
 		skel.update_pose(delta)
 
 	if fx != null:
-		fx.drive(delta, thrust, cmd["lateral"], cmd["vertical"], retro)
+		# model.thrust_mag, not the stick: the flight model raises it while the stabiliser
+		# carries the suit's weight, and that is the number the exhaust has to answer to.
+		var hold: float = model.thrust_mag if model.hover_active else 0.0
+		fx.drive(delta, thrust, cmd["lateral"], cmd["vertical"], retro, hold)
 	if trail != null:
 		# From the SOLES, which is where the boots are — a trail from the point mass hangs a
 		# metre above the exhaust it is supposed to be coming out of.

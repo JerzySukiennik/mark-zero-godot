@@ -222,15 +222,23 @@ static func _dot() -> GradientTexture2D:
 	return t
 
 ## `thrust` 0..1 overall, `lateral` and `vertical` so the palms answer to the hands' work.
-func drive(delta: float, thrust: float, lateral: float, vertical: float, braking: float) -> void:
+## `hover` is how hard the stabiliser is working, 0..1, and it is SEPARATE from `thrust`
+## for a reason: holding station is exactly when the sticks are asking for nothing, so a
+## thrust-driven exhaust goes dark at the one moment the suit is working hardest. Passing
+## the stick alone is why a hovering armour had four cold boots.
+func drive(delta: float, thrust: float, lateral: float, vertical: float, braking: float,
+		hover: float = 0.0) -> void:
 	if _emitters.is_empty():
 		return
 	# Boots carry the lift and the forward push; palms are stabilisers and only light up hard
 	# when braking or working sideways. That division is what makes the suit look like it is
 	# flying itself rather than being dragged.
-	var boot := clampf(thrust * 0.85 + maxf(vertical, 0.0) * 0.6 + braking * 0.35, 0.0, 1.4)
+	var boot := clampf(thrust * 0.85 + maxf(vertical, 0.0) * 0.6 + braking * 0.35
+		+ hover * 0.95, 0.0, 1.4)
+	# In a hover the PALMS matter as much as the boots — it is the four of them together
+	# holding him up, and it is the palms you actually see from behind.
 	var palm := clampf(braking * 0.9 + absf(lateral) * 0.55 + maxf(vertical, 0.0) * 0.35
-		+ thrust * 0.12, 0.0, 1.3)
+		+ thrust * 0.12 + hover * 0.75, 0.0, 1.3)
 
 	for i in _emitters.size():
 		var e = _emitters[i]

@@ -98,6 +98,9 @@ const TURBULENCE := 1.35
 ## What the exhaust reads as while the suit is simply holding station. Not zero: standing
 ## still in the air is the single most expensive thing a repulsor does.
 const HOVER_BURN := 0.55
+## How far the suit leans into a full sideways slide, in radians. Roughly 35 degrees, which
+## is a committed bank without being aerobatics.
+const BANK_MAX := 0.62
 
 ## ---- on foot ---------------------------------------------------------------------------
 ## Until now the suit had no ground locomotion at all: _resolve_ground clamped Y and that
@@ -395,9 +398,22 @@ func _rotate(delta: float, cmd: Dictionary) -> void:
 	yaw -= look.x * spec.max_rate * falloff
 	pitch = clampf(pitch - look.y * spec.max_rate * falloff, -1.45, 1.45)
 	roll += cmd.get("roll", 0.0) * spec.roll_rate * delta
-	# Auto-level, weak on purpose: strong enough that the horizon comes back on its own,
-	# weak enough that a deliberate bank holds.
-	roll = lerpf(roll, 0.0, 1.0 - exp(-delta * spec.stability * 1.6))
+
+	# BANK INTO IT. Sliding sideways with the body dead level is the single thing that made
+	# lateral flight read as levitation rather than flying — Jurek: "po prostu lewituje w
+	# bok". A suit that wants to go right leans right, and the lean is most of what the eye
+	# uses to tell moving from being moved.
+	#
+	# It builds with airspeed: banking while stationary is a pose, banking through a fast
+	# slide is a turn.
+	var slide: float = clampf(cmd.get("lateral", 0.0), -1.0, 1.0)
+	var authority := clampf(speed / 45.0, 0.25, 1.0)
+	var want_roll := -slide * BANK_MAX * authority
+
+	# Auto-level towards the WANTED bank rather than towards flat. Weak on purpose: strong
+	# enough that the horizon comes back on its own when the stick is centred, weak enough
+	# that a deliberate roll still holds.
+	roll = lerpf(roll, want_roll, 1.0 - exp(-delta * spec.stability * 1.6))
 	basis_ = Basis.from_euler(Vector3(pitch, yaw, roll), EULER_ORDER_YXZ)
 
 func _air_density(alt: float) -> float:

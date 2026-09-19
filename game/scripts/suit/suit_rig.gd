@@ -76,20 +76,27 @@ static var POSES := {
 
 	# Arms out and forward, knees soft, and the palm discs pointing STRAIGHT DOWN because
 	# they are what is holding him up.
+	# HE STANDS IN THE AIR. Jurek: "powinien stac z rekami i nogami prosto w dol".
+	#
+	# The previous hover was a crouch — knees folded back, elbows tucked, shoulders thrown
+	# out sideways — which is a man bracing, not a man being held up by four repulsors. The
+	# real thing is almost a standing figure that happens to have no floor: legs straight
+	# and together, arms hanging just clear of the body, and all four emitters pointing
+	# DOWN, because they are the only reason he is not falling.
 	"hover": {
-		"piv_shoulderL": { "dir": _d(0.60, -0.62, -0.50), "twist": -18.0 },
-		"piv_shoulderR": { "dir": _d(-0.60, -0.62, -0.50), "twist": 18.0 },
-		"piv_elbowL": { "dir": _d(-0.12, -0.88, -0.46) },
-		"piv_elbowR": { "dir": _d(0.12, -0.88, -0.46) },
-		"piv_palmL": { "aim": _d(0.06, -0.99, 0.10) },
-		"piv_palmR": { "aim": _d(-0.06, -0.99, 0.10) },
-		"piv_hipL": { "dir": _d(0.07, -0.96, -0.26) },
-		"piv_hipR": { "dir": _d(-0.07, -0.96, -0.26) },
-		"piv_kneeL": { "dir": _d(0, -0.92, 0.39) },
-		"piv_kneeR": { "dir": _d(0, -0.92, 0.39) },
-		"piv_ankleL": { "dir": _d(0, -0.89, -0.45) },
-		"piv_ankleR": { "dir": _d(0, -0.89, -0.45) },
-		"piv_chest": { "dir": _d(0, 0.995, 0.10) },
+		"piv_shoulderL": { "dir": _d(0.24, -0.97, -0.04), "twist": -5.0 },
+		"piv_shoulderR": { "dir": _d(-0.24, -0.97, -0.04), "twist": 5.0 },
+		"piv_elbowL": { "dir": _d(-0.02, -0.999, 0.02) },
+		"piv_elbowR": { "dir": _d(0.02, -0.999, 0.02) },
+		"piv_palmL": { "aim": _d(0.04, -0.999, 0.0) },
+		"piv_palmR": { "aim": _d(-0.04, -0.999, 0.0) },
+		"piv_hipL": { "dir": _d(0.03, -0.999, -0.02) },
+		"piv_hipR": { "dir": _d(-0.03, -0.999, -0.02) },
+		"piv_kneeL": { "dir": _d(0, -0.999, 0.03) },
+		"piv_kneeR": { "dir": _d(0, -0.999, 0.03) },
+		"piv_ankleL": { "dir": _d(0, -0.80, 0.60) },
+		"piv_ankleR": { "dir": _d(0, -0.80, 0.60) },
+		"piv_chest": { "dir": _d(0, 1.0, 0.0) },
 	},
 
 	# The repulsor stance. Asymmetric on purpose: two arms out is a pose, one arm out is a
@@ -175,13 +182,28 @@ func index(r: Node3D) -> void:
 			var name := String(n.name)
 			pivots[name] = n
 			_rest[name] = (n as Node3D).quaternion
-			# Direction to the first child, in this pivot's own space. That is the limb's
+			# Direction to the child PIVOT, in this pivot's own space. That is the limb's
 			# axis, and it is what a pose direction is swung onto.
+			#
+			# "The first child with a non-zero offset" is the obvious rule and it is wrong:
+			# meshes hang off these pivots too, and they come first. piv_kneeL's children
+			# are the 1.5 cm knee cap, then the ankle 40 cm below — so the shin's axis was
+			# taken as the cap's offset and came out pointing FORWARDS. Every knee and ankle
+			# direction in every authored pose was then swung from the wrong axis: asking
+			# for a leg hanging straight down produced a shin sticking out horizontally,
+			# ninety-two degrees off. It is the anatomy that defines the limb, and the
+			# anatomy is the pivot chain; the meshes are decoration hung on it.
 			var dir := Vector3(0, -1, 0)
+			var best := 0.0
 			for c in n.get_children():
-				if c is Node3D and (c as Node3D).position.length() > 1e-4:
-					dir = (c as Node3D).position.normalized()
-					break
+				if not (c is Node3D) or not String(c.name).begins_with("piv_"):
+					continue
+				var d := (c as Node3D).position
+				# The FARTHEST child pivot, for joints that carry more than one — the elbow
+				# is the palm's axis, not that of anything clipped nearer the joint.
+				if d.length() > best and d.length() > 1e-4:
+					best = d.length()
+					dir = d.normalized()
 			_child_dir[name] = dir
 
 func has_pivot(n: String) -> bool:
