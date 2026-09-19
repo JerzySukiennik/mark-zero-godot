@@ -88,6 +88,17 @@ func _initialize() -> void:
 	_run(m, _cmd({ thrust = 1.0 }), 40.0)
 	_ok(m.speed > m.spec.top_speed * 0.75, "40 s at full throttle reaches %.0f m/s (target %d)" % [m.speed, m.spec.top_speed])
 
+	# --- hands off the stick: the suit stops itself (see AUTO_BRAKE in suit_pilot.gd)
+	m.position = Vector3(0, 300, 0); m.velocity = Vector3(0, 0, -200); m.basis_ = Basis.IDENTITY
+	var t6 := 0.0
+	while t6 < 12.0 and m.speed > 3.0:
+		# What suit_pilot asks for with the stick centred: eased-in retro, not full.
+		var r: float = clampf((m.speed - 1.5) / 12.0, 0.0, 1.0) * 0.55
+		m.step(STEP, _cmd({ retro = r, brake_only = true }))
+		t6 += STEP
+	_ok(t6 < 6.0, "hands off the stick, 200 m/s coasts to a stop in %.1f s" % t6)
+	_ok(m.velocity.z < 30.0, "and it does not sail off backwards (vz %.1f)" % m.velocity.z)
+
 	# --- every armour loads and flies
 	for id in SuitSpecsS.order:
 		var n: RefCounted = FlightModelS.new()

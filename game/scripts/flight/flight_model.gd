@@ -120,7 +120,18 @@ func step(delta: float, cmd: Dictionary) -> void:
 		# nearly stopped or already travelling backwards, none of it at speed. Capping the
 		# retro at the impulse that zeroes velocity made a brake that could never produce
 		# reverse motion — "you can't fly backwards any more" was the cost of fixing braking.
-		var beta := 1.0 if (bs > 0.05 and bv.z > 0.7 * bs) else 1.0 - clampf((bs - 4.0) / 8.0, 0.0, 1.0)
+		# STOP-ONLY, for a brake nobody pressed.
+		#
+		# beta is what lets a HELD retro turn into reverse thrust once you have stopped, and
+		# that is right for a button: the player asked for it and can let go. It is wrong for
+		# the automatic brake that runs whenever the stick is centred, because the suit would
+		# come to a halt and then quietly fly off backwards on its own. Measured before this
+		# existed: 200 m/s never reached a stop at all and ended up doing 140 m/s in reverse.
+		#
+		# With beta at zero the burn only ever opposes the velocity it can see, and the cap
+		# below means it converges on a stop rather than shooting past it.
+		var beta := 0.0 if cmd.get("brake_only", false) else \
+			(1.0 if (bs > 0.05 and bv.z > 0.7 * bs) else 1.0 - clampf((bs - 4.0) / 8.0, 0.0, 1.0))
 		var d := Vector3(0, 0, beta)
 		if bs > 0.05:
 			d += bv * (-(1.0 - beta) / bs)

@@ -22,6 +22,11 @@ const SUITS := {
 const FEET_DROP := 1.0
 ## How far the world slows while the aim trigger is held.
 const AIM_TIME_SCALE := 0.22
+## Hands off the stick: how hard the suit stops itself, as a fraction of full retro.
+const AUTO_BRAKE := 0.55
+const AUTO_BRAKE_DEADZONE := 0.12
+## Below this it stops braking, so it settles instead of hunting around zero.
+const AUTO_BRAKE_FLOOR := 1.5
 
 @export var peer_id := 1
 @export var armor_id := "mk1"
@@ -100,32 +105,42 @@ func _physics_process(delta: float) -> void:
 func _step_local(delta: float) -> void:
 	var look := Pad.look(delta)
 	var move := Pad.move()
-	var aiming := Pad.retro() > 0.25          # L2 — see AIM_SLOWDOWN below
+	var aiming := Pad.retro() > 0.25          # L2 — see AIM_TIME_SCALE
 
-	# FLIGHT IS ONE SPEED, NOT A THROTTLE.
+	# THE STICKS FLY IT. Jurek's revision: "R2 do naddźwiękowej, a latanie to po prostu gałki
+	# i X do góry." So there is no throttle button at all — pushing the left stick forward IS
+	# the throttle, X climbs, and R2 is reserved for the one speed decision that matters.
 	#
-	# Jurek's call: "R2 - Lot (stała prędkość, nie ma throttle) + jakiś przycisk żeby wejść w
-	# naddźwiękową". It costs the analog throttle, which was the one thing a pad could do that
-	# a keyboard could not — but it buys the Iron Man reading, where flight is a state you are
-	# in rather than a pedal you modulate, and the only speed decision is whether to go
-	# supersonic. Simpler to fly and much easier to aim from.
-	var throttle := 1.0 if Pad.thrust() > 0.15 else 0.0
+	# This is a better fit for a suit than a trigger was. A trigger is a pedal; a stick is a
+	# direction, and a flying armour is aimed rather than driven.
+	var stick_fwd := -move.y
 
-	# Supersonic is Mk II and up: the Mk I is a flying oil drum and has no business breaking
-	# the sound barrier.
-	var supersonic := false
-	if throttle > 0.0 and Pad.pressed("boost") and armor_id != "mk1":
-		supersonic = true
+	# AND IT STOPS ITSELF. "Strój powinien sam hamować." Let go of the stick and the suit
+	# swings its repulsors round and kills the speed, rather than coasting on drag alone —
+	# which at 300 m/s takes most of a kilometre and feels like ice. This is the retro burn
+	# the flight model already has, asked for automatically instead of by a button: hands off
+	# means stop, which is what a hovering machine should do.
+	var thrust := maxf(stick_fwd, 0.0)
+	var retro := maxf(-stick_fwd, 0.0)
+	var brake_only := false
+	if absf(stick_fwd) < AUTO_BRAKE_DEADZONE and model.speed > AUTO_BRAKE_FLOOR:
+		brake_only = true
+		# Eased in over the first few m/s so the last metre per second does not jerk.
+		retro = clampf((model.speed - AUTO_BRAKE_FLOOR) / 12.0, 0.0, 1.0) * AUTO_BRAKE
+
+	# Supersonic on R2, Mk II and up: the Mk I is a flying oil drum and has no business
+	# breaking the sound barrier.
+	var supersonic := Pad.thrust() > 0.35 and armor_id != "mk1"
 
 	# AIMING SLOWS THE WORLD, the way Marvel's Spider-Man does it. Time dilation rather than
-	# a zoom: it buys thinking time instead of magnifying the target, and it makes a snap
-	# decision at 300 m/s possible at all. The suit itself is NOT slowed as much as the world,
-	# which is what makes it feel like the armour is quick rather than the world being sticky.
+	# a zoom: it buys thinking time instead of magnifying the target, which is what makes a
+	# snap decision at 300 m/s possible at all.
 	Engine.time_scale = AIM_TIME_SCALE if aiming else 1.0
 
 	var cmd := {
-		thrust = throttle,
-		retro = 0.0,
+		thrust = thrust,
+		retro = retro,
+		brake_only = brake_only,
 		lateral = move.x,
 		vertical = (1.0 if Pad.pressed("up") else 0.0) - (1.0 if Pad.pressed("down") else 0.0),
 		look = look,

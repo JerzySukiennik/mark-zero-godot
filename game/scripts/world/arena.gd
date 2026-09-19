@@ -28,18 +28,31 @@ func _sky() -> void:
 	var env := Environment.new()
 	var sky := Sky.new()
 	var mat := ProceduralSkyMaterial.new()
-	mat.sky_top_color = Color(0.13, 0.22, 0.38)
-	mat.sky_horizon_color = Color(0.58, 0.62, 0.66)
-	mat.ground_bottom_color = Color(0.08, 0.08, 0.09)
-	mat.ground_horizon_color = Color(0.45, 0.47, 0.50)
+	# A brighter sky is not a mood choice here: it IS the suit's key light, because a sky
+	# this size is the only large source in an empty scene.
+	mat.sky_top_color = Color(0.30, 0.45, 0.68)
+	mat.sky_horizon_color = Color(0.82, 0.86, 0.90)
+	mat.ground_bottom_color = Color(0.20, 0.20, 0.22)
+	mat.ground_horizon_color = Color(0.62, 0.64, 0.66)
+	mat.sky_energy_multiplier = 1.25
 	sky.sky_material = mat
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 0.55
+	# The subject is a dark red and gold METAL figure, and metal has almost no diffuse
+	# response — nearly everything you see on it is reflected environment. Lighting tuned for
+	# a city of flat concrete leaves the suit reading as a silhouette. Jurek: "strój jest
+	# zbyt ciemny."
+	env.ambient_light_energy = 1.35
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.glow_enabled = true
 	env.glow_intensity = 0.5
+	# Brightens the midtones without blowing the highlights, which is what a metal subject
+	# against a bright sky needs — raising exposure alone would just clip the sky.
+	env.adjustment_enabled = true
+	env.adjustment_brightness = 1.06
+	env.adjustment_contrast = 1.04
+	env.adjustment_saturation = 1.10
 	# Haze over a city this size is not a mood, it is depth: without it the far end of the
 	# island reads as being the same distance away as the next block.
 	env.fog_enabled = true
@@ -52,10 +65,21 @@ func _sky() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -125, 0)
-	sun.light_energy = 1.15
+	sun.light_energy = 1.9
+	sun.light_color = Color(1.0, 0.96, 0.90)
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 900.0
+	sun.directional_shadow_max_distance = 400.0
 	add_child(sun)
+
+	# A cool fill from the opposite side, with no shadow. Without it the unlit side of the
+	# armour goes to black and the silhouette loses all its shape — the single biggest reason
+	# a metal figure reads as "too dark" even when the key light is strong.
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-18, 55, 0)
+	fill.light_energy = 0.55
+	fill.light_color = Color(0.72, 0.82, 1.0)
+	fill.shadow_enabled = false
+	add_child(fill)
 
 func _sync_suits() -> void:
 	# Anyone in the roster who has no suit yet gets one; anyone who left loses theirs.
