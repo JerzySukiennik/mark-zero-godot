@@ -1,0 +1,11 @@
+# Godot's import cache and editor state. Regenerated on first open; never committed.
+game/.godot/
+
+# Exported builds.
+builds/
+*.dmg
+*.exe
+*.zip
+
+# The abandoned three.js prototype, kept on disk for reference but not in the repo.
+Niepotrzebne/
