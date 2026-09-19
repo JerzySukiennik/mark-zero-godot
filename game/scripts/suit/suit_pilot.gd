@@ -50,6 +50,15 @@ var _stage: Stage
 ## visibly snaps back, which reads far worse than being 120 ms behind.
 var _net_pos := Vector3.ZERO
 var _net_basis := Basis.IDENTITY
+## Per-hand shot envelope, 1 at the instant of firing and gone in a fifth of a second.
+## This is the ONLY thing that tells the two arms apart while shooting: the authored "fire"
+## pose is deliberately symmetric, so that pressing R1 cannot animate the left arm.
+var _recoil := { "R": 0.0, "L": 0.0 }
+## How far the firing arm reaches past the shared stance, in radians.
+const SHOT_REACH := 0.42
+## The snap back through the shoulder. Cubed, so it is violent for two frames and then gone.
+const SHOT_KICK := 0.30
+const SHOT_DECAY := 5.0
 var _net_thrust := 0.0
 
 var is_mine: bool:
@@ -170,7 +179,13 @@ func _step_local(delta: float) -> void:
 	#
 	# This is a better fit for a suit than a trigger was. A trigger is a pedal; a stick is a
 	# direction, and a flying armour is aimed rather than driven.
-	var stick_fwd := -move.y
+	# ON FOOT THE SAME STICK WALKS. Standing on the plate with the boots cold, pushing the
+	# stick has to move the suit across the ground rather than light the thrusters — so the
+	# flight controls stand down entirely until something asks it into the air. X, R2 and
+	# any real deflection of the stick while already flying all count as asking.
+	var on_foot := model.grounded and not Pad.pressed("up")
+
+	var stick_fwd := 0.0 if on_foot else -move.y
 
 	# AND IT STOPS ITSELF. "Strój powinien sam hamować." Let go of the stick and the suit
 	# swings its repulsors round and kills the speed, rather than coasting on drag alone —
@@ -180,7 +195,7 @@ func _step_local(delta: float) -> void:
 	var thrust := maxf(stick_fwd, 0.0)
 	var retro := maxf(-stick_fwd, 0.0)
 	var brake_only := false
-	if absf(stick_fwd) < AUTO_BRAKE_DEADZONE and model.speed > AUTO_BRAKE_FLOOR:
+	if not on_foot and absf(stick_fwd) < AUTO_BRAKE_DEADZONE and model.speed > AUTO_BRAKE_FLOOR:
 		brake_only = true
 		# Eased in over the first few m/s so the last metre per second does not jerk.
 		retro = clampf((model.speed - AUTO_BRAKE_FLOOR) / 12.0, 0.0, 1.0) * AUTO_BRAKE
@@ -198,7 +213,10 @@ func _step_local(delta: float) -> void:
 		thrust = thrust,
 		retro = retro,
 		brake_only = brake_only,
-		lateral = move.x,
+		lateral = 0.0 if on_foot else move.x,
+		# The raw stick, for FlightModel._walk. Untouched by the flight mapping above,
+		# because walking wants both axes as a direction rather than as throttle and slide.
+		walk = move if on_foot else Vector2.ZERO,
 		vertical = (1.0 if Pad.pressed("up") else 0.0) - (1.0 if Pad.pressed("down") else 0.0),
 		look = look,
 		roll = 0.0,
@@ -217,8 +235,15 @@ func _step_local(delta: float) -> void:
 	if rig != null:
 		rig.position = Vector3(0, -FEET_DROP, 0)
 		rig.basis = model.basis_
+	# Firing happens before the pose is solved, so a shot and the arm that threw it land on
+	# the SAME frame. Solving first meant the recoil was always one frame stale.
+	_shoot(aiming)
+	_turret(delta)
+	_laser(delta)
+
 	if skel != null:
 		poses.update(delta, model, cmd, skel)
+		_drive_shot_arms(delta)
 		skel.update_pose(delta)
 
 	if fx != null:
@@ -228,10 +253,6 @@ func _step_local(delta: float) -> void:
 		# metre above the exhaust it is supposed to be coming out of.
 		trail.update(delta, model.position - Vector3(0, FEET_DROP * 0.8, 0),
 			model.speed, model.speed / 343.0, model.basis_)
-
-	_shoot(aiming)
-	_turret(delta)
-	_laser(delta)
 
 	Rumble.set_flight(model.thrust_mag, model.g_force)
 	if was_flying and model.grounded:
@@ -253,6 +274,20 @@ func _step_local(delta: float) -> void:
 		if turret != null:
 			visor.hud.turret = turret.charge
 
+## Singles out the arm that just fired. Negative X on a shoulder is forward — the same
+## convention the arm trail uses in Poses, where braking throws both arms out in front.
+func _drive_shot_arms(delta: float) -> void:
+	for hand: String in ["R", "L"]:
+		var r: float = _recoil[hand]
+		if r <= 0.0:
+			continue
+		_recoil[hand] = maxf(0.0, r - delta * SHOT_DECAY)
+		# Reach holds the arm at the target; kick is the recoil going back through the
+		# shoulder and dies almost immediately, so the two read as one punch.
+		var kick: float = SHOT_KICK * r * r * r
+		skel.add_offset("piv_shoulder" + hand, Poses.X_AX, -SHOT_REACH * r + kick)
+		skel.add_offset("piv_elbow" + hand, Poses.X_AX, -0.45 * r)
+
 ## RAPID-PRESS, NOT HOLD. Jurek's rule, from Marvel's Spider-Man: while aiming you tap R1
 ## and L1 as fast as you can and each tap is a shot. So these are just-pressed edges rather
 ## than held state — holding does nothing, which is deliberate. A held trigger is a machine
@@ -269,6 +304,7 @@ func _shoot(aiming: bool) -> void:
 		var muzzle: Vector3 = (skel.pivots[pivot_name] as Node3D).global_position
 		var target := Repulsors.aim_point(camera, muzzle)
 		var kick := guns.fire(hand, muzzle, target)
+		_recoil[hand] = 1.0
 		if kick != Vector3.ZERO:
 			# RECOIL MOVES THE SUIT. Firing downward should lift you — a repulsor is a
 			# thruster you are pointing at something else, so it has to push back.
@@ -289,6 +325,7 @@ func _turret(delta: float) -> void:
 	if held and turret.ready_to_fire():
 		var muzzle := global_position
 		var kick := turret.fire(Repulsors.aim_point(camera, muzzle))
+		_recoil[hand] = 1.0
 		if kick != Vector3.ZERO:
 			model.velocity += kick
 			if visor != null and visor.hud != null:

@@ -31,6 +31,9 @@ static func _d(x: float, y: float, z: float) -> Vector3:
 ## degrees of roll about it, `aim` points an emitter in the SUIT's frame.
 static var POSES := {
 	"stand": {},
+	# The walk has no authored base either: it IS the stand, with the cycle laid over it as
+	# offsets. Authoring a mid-stride key here would fight the cycle for the same joints.
+	"walk": {},
 
 	# Arms swept down the flanks with the fists past the hips. The first version held them
 	# straight out to the sides, off a hero frame — and a hero frame is a deliberate hold for
@@ -74,13 +77,18 @@ static var POSES := {
 
 	# The repulsor stance. Asymmetric on purpose: two arms out is a pose, one arm out is a
 	# shot. The left punches out at the target, the right stays low and ready.
+	# SYMMETRIC, on purpose. This pose used to throw the LEFT arm out front and leave the
+	# right one hanging, whichever palm had actually fired -- so pressing R1 looked like the
+	# suit shooting left-handed ("sa zamienione rece strzelania"). The stance is now the
+	# same on both sides and the FIRING arm is singled out by a short offset pushed from
+	# SuitPilot, which is also where the recoil snap belongs.
 	"fire": {
-		"piv_shoulderL": { "dir": _d(0.38, -0.30, -0.87), "twist": -12.0 },
-		"piv_shoulderR": { "dir": _d(-0.26, -0.74, -0.62), "twist": 10.0 },
-		"piv_elbowL": { "dir": _d(-0.04, -0.22, -0.97) },
-		"piv_elbowR": { "dir": _d(0.06, -0.90, -0.43) },
+		"piv_shoulderL": { "dir": _d(0.34, -0.38, -0.86), "twist": -10.0 },
+		"piv_shoulderR": { "dir": _d(-0.34, -0.38, -0.86), "twist": 10.0 },
+		"piv_elbowL": { "dir": _d(-0.05, -0.24, -0.97) },
+		"piv_elbowR": { "dir": _d(0.05, -0.24, -0.97) },
 		"piv_palmL": { "aim": _d(0, -0.06, -1) },
-		"piv_palmR": { "aim": _d(0, -0.42, -0.91) },
+		"piv_palmR": { "aim": _d(0, -0.06, -1) },
 		"piv_hipL": { "dir": _d(0.06, -0.99, -0.10) },
 		"piv_hipR": { "dir": _d(-0.06, -0.99, -0.10) },
 		"piv_kneeL": { "dir": _d(0, -0.97, 0.24) },

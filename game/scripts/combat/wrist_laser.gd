@@ -27,11 +27,19 @@ const AIR_TURN := TAU
 const GROUND_TURN := PI * 1.15
 const RANGE := 60.0
 const CHARGE_COST := 1.0
-## The suit charges from electrical damage taken, cables, and the like. Slow on purpose:
+## The suit charges from electrical damage taken, cables, and the like. Rare on purpose:
 ## this is a thing you earn, not a cooldown you wait out.
-const TRICKLE := 0.035
+##
+## It was 0.035, which is a hair under THIRTY SECONDS from empty to a single shot, and the
+## suit also started empty. The result was a weapon that could not be fired at all in any
+## session short enough to be called a playtest — "nie dziala tez to trojkat z kolkiem" was
+## the button working perfectly and the charge never arriving. Eight seconds still makes it
+## the rarest thing on the pad without making it fiction.
+const TRICKLE := 0.125
 
-var charge := 0.0
+## FULL AT SPAWN. The first press of a weapon has to do something, or the player concludes
+## the binding is broken and stops pressing it — and then never finds out it works.
+var charge := 1.0
 var active := false
 var in_air := false
 var t := 0.0

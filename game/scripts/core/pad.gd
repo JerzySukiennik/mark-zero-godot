@@ -18,20 +18,29 @@ class_name PadInput
 signal pad_changed(connected: bool)
 
 ## Action name -> [JoyButton] . One place, read by both the InputMap setup and the glyphs.
+## Action -> every physical button that should trigger it.
+##
+## A LIST, not a single index, and that is load-bearing. The touchpad click is reported as
+## JOY_BUTTON_TOUCHPAD (20) by SDL's DualShock mapping and as JOY_BUTTON_MISC1 (15) by some
+## driver builds; binding only MISC1 is why the menu could not be opened at all — Jurek
+## pressed "ten duzy przycisk" and nothing happened, because the pad was sending 20.
+## Listing both costs nothing and removes a whole class of "works on my machine".
 const BUTTONS := {
-	"fire_r":      JOY_BUTTON_RIGHT_SHOULDER,   # R1 — right palm
-	"fire_l":      JOY_BUTTON_LEFT_SHOULDER,    # L1 — left palm
-	"turret":      JOY_BUTTON_X,                # square — shoulder turret
-	"menu":        JOY_BUTTON_MISC1,             # touchpad click
-	"up":          JOY_BUTTON_A,                # cross
-	"down":        JOY_BUTTON_LEFT_SHOULDER,    # L1 is also descend when not firing
-	"interact":    JOY_BUTTON_Y,                # triangle
-	"suit_toggle": JOY_BUTTON_B,                # circle
-	"hover":       JOY_BUTTON_LEFT_STICK,       # L3
-	"faceplate":   JOY_BUTTON_RIGHT_STICK,      # R3
-	"pause":       JOY_BUTTON_START,            # options
-	"ui_accept_pad": JOY_BUTTON_A,
-	"ui_back":     JOY_BUTTON_B,
+	"fire_r":      [JOY_BUTTON_RIGHT_SHOULDER],   # R1 - right palm
+	"fire_l":      [JOY_BUTTON_LEFT_SHOULDER],    # L1 - left palm
+	"turret":      [JOY_BUTTON_X],                # square - shoulder turret
+	"menu":        [JOY_BUTTON_TOUCHPAD, JOY_BUTTON_MISC1, JOY_BUTTON_START],
+	"up":          [JOY_BUTTON_A, JOY_BUTTON_DPAD_UP],
+	# Descend used to share L1 with the left repulsor, so every left-hand shot also dropped
+	# the suit. The d-pad is free; firing and flying no longer fight over one button.
+	"down":        [JOY_BUTTON_DPAD_DOWN],
+	"interact":    [JOY_BUTTON_Y],                # triangle
+	"suit_toggle": [JOY_BUTTON_B],                # circle
+	"hover":       [JOY_BUTTON_LEFT_STICK],       # L3
+	"faceplate":   [JOY_BUTTON_RIGHT_STICK],      # R3
+	"pause":       [JOY_BUTTON_START],            # options
+	"ui_accept_pad": [JOY_BUTTON_A],
+	"ui_back":     [JOY_BUTTON_B],
 }
 
 ## What the player is told to press. PlayStation names, because the pad is a DualShock.
@@ -41,7 +50,7 @@ const BUTTONS := {
 ## and a screenshot tool or a test that renders them must not need the whole input system
 ## booted to find out that fire is R1. Same lesson as the armour spec table.
 const GLYPH := {
-	"fire_r": "R1", "fire_l": "L1", "turret": "□", "up": "✕", "down": "L1",
+	"fire_r": "R1", "fire_l": "L1", "turret": "□", "up": "✕", "down": "D-PAD ↓",
 	"menu": "TOUCHPAD", "interact": "△",
 	"suit_toggle": "○", "hover": "L3", "faceplate": "R3", "pause": "OPTIONS",
 	"supersonic": "R2", "aim": "L2", "move": "L STICK", "look": "R STICK",
@@ -70,9 +79,10 @@ func _install_actions() -> void:
 	for action in BUTTONS:
 		if not InputMap.has_action(action):
 			InputMap.add_action(action)
-		var ev := InputEventJoypadButton.new()
-		ev.button_index = BUTTONS[action]
-		InputMap.action_add_event(action, ev)
+		for idx: int in BUTTONS[action]:
+			var ev := InputEventJoypadButton.new()
+			ev.button_index = idx
+			InputMap.action_add_event(action, ev)
 
 func _on_joy_changed(idx: int, is_connected: bool) -> void:
 	_rescan()

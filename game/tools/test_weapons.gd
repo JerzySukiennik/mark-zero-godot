@@ -52,6 +52,10 @@ func _initialize() -> void:
 	root.add_child(l)
 	l.build()
 	l.attach(skel)
+	# Spawned charged now, so the first press of triangle+circle does something. The rule
+	# being tested is still the real one — an EMPTY suit refuses — so the test drains it by
+	# hand instead of leaning on the starting value.
+	l.charge = 0.0
 	_ok(not l.ready_to_fire, "it will not fire on an uncharged suit")
 	l.add_charge(1.0)
 	_ok(l.ready_to_fire, "a charged suit can use it")

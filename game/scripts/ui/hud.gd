@@ -19,6 +19,16 @@ const RED := Color(1.0, 0.36, 0.30)
 const SWAY := 26.0
 const SWAY_LAG := 0.09
 
+## THE SAFE AREA, as a fraction of each axis.
+##
+## The visor shader magnifies what it samples — that is what makes the glass read as curved
+## — so the outermost band of the SubViewport is never shown on screen at all. The cut is
+## worst at the corners and is exactly `curve * r2 * half`, which for the shader's 0.028 and
+## a corner's r2 of 2 comes to 2.8% of each axis. Drawing to the raw edge therefore put the
+## integrity panel half outside the helmet: "znika w ogole z ekranu to HP". Everything is
+## laid out inside this inset instead, with a little margin over the computed loss.
+const VISOR_CUT := 0.034
+
 var health := 1.0
 var repulsor_l := 1.0
 var repulsor_r := 1.0
@@ -56,9 +66,12 @@ func _u() -> float:
 	return maxf(0.55, size.y / 1080.0)
 
 func _draw() -> void:
-	var s := size
+	# `s` is the SAFE rect, not the viewport, and `o` carries the inset — so every panel
+	# below can go on measuring from the edges without knowing the glass exists.
+	var m := size * VISOR_CUT
+	var s := size - m * 2.0
 	var u := _u()
-	var o := _sway
+	var o := _sway + m
 
 	# ---- top left: the suit itself -------------------------------------------------
 	_panel(Rect2(o + Vector2(38, 30) * u, Vector2(300, 84) * u))
@@ -92,7 +105,10 @@ func _draw() -> void:
 
 	# ---- centre: the reticle, only while aiming ------------------------------------
 	if _aiming > 0.01:
-		var c := s * 0.5 + o * 0.35        # the reticle sways less than the frame around it
+		# The TRUE centre, not the safe rect's — the crosshair marks where the suit is
+		# pointing, and the inset is symmetric so the two centres coincide anyway. Adding
+		# the inset here would have walked it off the aim point.
+		var c := size * 0.5 + _sway * 0.35 # the reticle sways less than the frame around it
 		var col := Color(CYAN.r, CYAN.g, CYAN.b, _aiming)
 		var r := lerpf(38.0, 25.0, _aiming) * u
 		draw_arc(c, r, 0, TAU, 48, col, maxf(1.5, 1.8 * u), true)

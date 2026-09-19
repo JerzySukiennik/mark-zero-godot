@@ -27,7 +27,7 @@ const MAX_PLAYERS := 8
 
 var players: Dictionary = {}          ## peer id -> { name, armor }
 var local_name := "PILOT"
-var local_armor := "mk3"
+var local_armor := "mk1"
 var is_host := false
 
 func _ready() -> void:

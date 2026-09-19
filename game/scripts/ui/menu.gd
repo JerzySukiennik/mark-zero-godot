@@ -141,6 +141,8 @@ func _u() -> float:
 	return maxf(0.55, size.y / 1080.0)
 
 func _draw() -> void:
+	# No safe-area inset here, unlike the HUD: the menu's own margin below is 7% of the
+	# width and 13% of the height, which already clears the band the visor glass eats.
 	var s := size
 	var u := _u()
 	# A dark wash rather than a solid panel: the suit is still there behind it, and being

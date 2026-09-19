@@ -14,7 +14,7 @@ extends RefCounted
 ## every one of them was averaged away before it reached the screen and the suit read as a
 ## statue — which is exactly what Jurek reported, repeatedly, for weeks.
 
-const NAMES := ["stand", "hover", "cruise", "brake", "fire", "land"]
+const NAMES := ["stand", "walk", "hover", "cruise", "brake", "fire", "land"]
 
 ## How fast each pose arrives, and how fast it lets go, per second.
 ##
@@ -25,8 +25,8 @@ const NAMES := ["stand", "hover", "cruise", "brake", "fire", "land"]
 ##
 ## Asymmetric on purpose: snapping INTO a pose reads as a decision, snapping out of one reads
 ## as a glitch.
-const ENTER := { "stand": 5.0, "hover": 5.0, "cruise": 4.0, "brake": 9.0, "fire": 22.0, "land": 26.0 }
-const LEAVE := { "stand": 4.0, "hover": 5.0, "cruise": 4.0, "brake": 6.0, "fire": 5.0, "land": 3.0 }
+const ENTER := { "stand": 5.0, "walk": 9.0, "hover": 5.0, "cruise": 4.0, "brake": 9.0, "fire": 22.0, "land": 26.0 }
+const LEAVE := { "stand": 4.0, "walk": 7.0, "hover": 5.0, "cruise": 4.0, "brake": 6.0, "fire": 5.0, "land": 3.0 }
 
 const X_AX := Vector3(1, 0, 0)
 const Y_AX := Vector3(0, 1, 0)
@@ -68,7 +68,9 @@ func _pick(delta: float, model: FlightModel, cmd: Dictionary) -> void:
 	if _land_timer > 0.0:
 		name = "land"
 	elif model.grounded and model.thrust_mag < 0.1:
-		name = "stand"
+		# Half a metre per second is the line: below it the legs would be swinging for a
+		# drift the eye cannot see, which reads as the suit shuffling on the spot.
+		name = "walk" if model.ground_speed > 0.5 else "stand"
 	elif cmd.get("aiming", false) or cmd.get("firing", false):
 		name = "fire"
 	elif backwards or retro > 0.05:
@@ -101,7 +103,7 @@ func _drive(delta: float, model: FlightModel, cmd: Dictionary, rig: SuitRig) -> 
 
 	var fast := clampf(model.speed / maxf(1.0, model.spec.top_speed * 0.55), 0.0, 1.0)
 	var slide: float = clampf(cmd.get("lateral", 0.0), -1.0, 1.0)
-	var settled := clampf(1.0 - (blend["stand"] + blend["land"]), 0.0, 1.0)
+	var settled := clampf(1.0 - (blend["stand"] + blend["land"] + blend["walk"]), 0.0, 1.0)
 
 	# Arms trail the acceleration: push forward and they sweep back, brake and they are
 	# thrown out in front. Faded out as the suit settles onto its feet — a man standing still
@@ -133,6 +135,45 @@ func _drive(delta: float, model: FlightModel, cmd: Dictionary, rig: SuitRig) -> 
 	var look: Vector2 = cmd.get("look", Vector2.ZERO)
 	rig.add_offset("piv_neck", Y_AX, clampf(-look.x * 6.0, -0.30, 0.30))
 	rig.add_offset("piv_neck", X_AX, clampf(look.y * 4.0, -0.22, 0.22))
+
+	# THE WALK CYCLE. Phase comes from FlightModel.stride_phase, which counts DISTANCE
+	# rather than seconds — the feet cannot skate if the legs are geared to the ground.
+	var walking: float = blend["walk"]
+	if walking > 0.001:
+		var ph: float = model.stride_phase * TAU
+		var gait := clampf(model.ground_speed / FlightModel.RUN_SPEED, 0.0, 1.0)
+		# A stroll barely swings; a run throws the legs. One amplitude drives the whole
+		# cycle so the parts cannot drift out of proportion with each other.
+		var amp := lerpf(0.26, 0.70, gait) * walking
+		var s1 := sin(ph)
+		var s2 := sin(ph + PI)
+
+		# Hips swing fore and aft in opposition. Negative X is forward here, the same
+		# convention the arm trail uses.
+		rig.add_offset("piv_hipL", X_AX, -s1 * amp)
+		rig.add_offset("piv_hipR", X_AX, -s2 * amp)
+
+		# Knees bend on the BACK half of the swing only. A knee that bends symmetrically
+		# through the whole cycle is the single clearest tell of a puppet: real legs are
+		# straight as they plant and fold as they are picked up behind.
+		rig.add_offset("piv_kneeL", X_AX, maxf(0.0, sin(ph - PI * 0.35)) * amp * 1.6)
+		rig.add_offset("piv_kneeR", X_AX, maxf(0.0, sin(ph + PI * 0.65)) * amp * 1.6)
+		# Ankles keep the sole roughly flat against the plate through the plant.
+		rig.add_offset("piv_ankleL", X_AX, s1 * amp * 0.35)
+		rig.add_offset("piv_ankleR", X_AX, s2 * amp * 0.35)
+
+		# Arms counter-swing: the left arm goes with the RIGHT leg. Getting this the same
+		# way round is how a walk starts looking like a march.
+		rig.add_offset("piv_shoulderL", X_AX, -s2 * amp * 0.55)
+		rig.add_offset("piv_shoulderR", X_AX, -s1 * amp * 0.55)
+		rig.add_offset("piv_elbowL", X_AX, -(0.22 + 0.24 * gait) * walking)
+		rig.add_offset("piv_elbowR", X_AX, -(0.22 + 0.24 * gait) * walking)
+
+		# The pelvis twists with the stride and the chest counter-rotates against it. This
+		# pair costs two lines and does more for the walk than the legs do.
+		rig.add_offset("piv_hips", Y_AX, s1 * amp * 0.22)
+		rig.add_offset("piv_chest", Y_AX, -s1 * amp * 0.16)
+		rig.add_offset("piv_chest", Z_AX, s1 * amp * 0.09)
 
 	# HOLDING STATION. The flight model publishes what its stabiliser is doing this instant
 	# (see FlightModel._hover), and the limbs answer it. This is the difference between a

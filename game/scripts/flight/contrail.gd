@@ -16,8 +16,10 @@ extends Node3D
 ## solid blob at a hover. One puff every few metres travelled is the same density however
 ## fast you are going, which is what the eye reads as speed.
 
-## Metres between puffs along the flight path.
-const SPACING := 3.0
+## Metres between puffs along the flight path. Small, because a contrail is a LINE: at
+## three metres apart the puffs were far enough to be read one at a time, and once they had
+## also grown to four metres across the gaps closed into a bank of cloud instead.
+const SPACING := 1.2
 const MIN_SPEED := 14.0          ## below this it is exhaust pooling, not a trail
 
 var _smoke: GPUParticles3D
@@ -36,7 +38,9 @@ func _ready() -> void:
 func _make_smoke() -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.amount = 900
-	p.lifetime = 7.0
+	# Short. The old seven seconds meant a suit at speed dragged half a kilometre of smoke
+	# behind it, and the far end had spread so wide it was weather rather than a trail.
+	p.lifetime = 2.4
 	p.local_coords = false          # puffs stay where they were made, not glued to the suit
 	p.emitting = false
 	p.one_shot = false
@@ -46,31 +50,41 @@ func _make_smoke() -> GPUParticles3D:
 	# follows distance rather than time. `emitting` stays on and the RATE is what moves.
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = 0.25
+	pm.emission_sphere_radius = 0.10
 	pm.direction = Vector3(0, 1, 0)
-	pm.spread = 180.0
-	pm.initial_velocity_min = 0.4
-	pm.initial_velocity_max = 1.6
+	# A narrow cone, not a sphere. Puffs thrown in every direction turn the line into a
+	# tube of fog; thrown roughly along one axis they stay a ribbon.
+	pm.spread = 22.0
+	pm.initial_velocity_min = 0.15
+	pm.initial_velocity_max = 0.7
 	# A slow rise, so the line drifts upward and reads as smoke rather than as dots hanging
 	# in a vacuum.
-	pm.gravity = Vector3(0, 1.1, 0)
+	pm.gravity = Vector3(0, 0.35, 0)
 	pm.damping_min = 0.8
 	pm.damping_max = 1.4
-	pm.scale_min = 1.6
-	pm.scale_max = 3.0
+	# The single biggest cause of "brown clouds": puffs that START two metres across. A
+	# contrail is thin at the boot and widens slowly behind.
+	pm.scale_min = 0.30
+	pm.scale_max = 0.55
 	var c := Curve.new()
-	c.add_point(Vector2(0.0, 0.25))
-	c.add_point(Vector2(0.25, 1.0))
-	c.add_point(Vector2(1.0, 2.4))
+	c.add_point(Vector2(0.0, 0.35))
+	c.add_point(Vector2(0.22, 1.0))
+	c.add_point(Vector2(1.0, 2.2))
 	var ct := CurveTexture.new()
 	ct.curve = c
 	pm.scale_curve = ct
-	# Hot for the first instant — it is still flame as it leaves the boot — then smoke.
+	# WHITE, THE WHOLE WAY. The ramp used to open on hot amber, which is right for the flame
+	# itself and wrong for everything behind it: hundreds of translucent orange quads
+	# stacked over each other multiply down into mud, which is exactly what Jurek saw --
+	# "pare jakby chmur brazowych". The flame belongs at the emitter, in Thrusters, where it
+	# is a handful of particles and can be as hot as it likes. Out here it is condensation.
+	# It also fades IN over the first few per cent, so the line starts just behind the boot
+	# rather than in a bright knot around it.
 	pm.color_ramp = Thrusters._ramp([
-		[0.00, Color(1.0, 0.80, 0.45, 0.85)],
-		[0.08, Color(1.0, 0.62, 0.25, 0.60)],
-		[0.30, Color(0.86, 0.88, 0.92, 0.42)],
-		[1.00, Color(0.78, 0.82, 0.88, 0.0)],
+		[0.00, Color(0.94, 0.97, 1.0, 0.0)],
+		[0.06, Color(1.0, 1.0, 1.0, 0.50)],
+		[0.45, Color(0.90, 0.94, 1.0, 0.26)],
+		[1.00, Color(0.86, 0.90, 1.0, 0.0)],
 	])
 	p.process_material = pm
 	var q := QuadMesh.new()

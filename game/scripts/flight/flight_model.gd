@@ -96,6 +96,29 @@ const HOVER_STIFFNESS := 3.2
 ## How hard the air pushes it around while hovering.
 const TURBULENCE := 1.35
 
+## ---- on foot ---------------------------------------------------------------------------
+## Until now the suit had no ground locomotion at all: _resolve_ground clamped Y and that
+## was the whole of it, so standing on the plate the only way to move was to fire the
+## thrusters and skim. Jurek has asked for walking in three separate rounds of notes.
+##
+## STICK DEFLECTION IS THE GEARBOX. There is no run button — the pad is full — so a gentle
+## push walks and a full one runs, which is how it works in every third-person game he has
+## played and needs no explaining.
+const WALK_SPEED := 2.1
+const RUN_SPEED := 7.4
+const WALK_GEAR := 0.35          ## deflection at which the walk tops out and the run begins
+const GROUND_ACCEL := 22.0
+const GROUND_FRICTION := 16.0
+## Metres of ground covered per complete two-step cycle. The stride phase is advanced by
+## DISTANCE, never by time, which is the only thing that keeps the feet from skating: at
+## half speed the legs swing half as often on their own, with nothing to synchronise.
+const STRIDE := 1.75
+
+## Horizontal speed while on foot, and the walk-cycle phase in whole cycles. Both are read
+## by Poses; neither means anything in the air.
+var ground_speed := 0.0
+var stride_phase := 0.0
+
 ## Derived drag constants, rebuilt whenever the armour changes.
 var _k_fwd := 0.0
 var _k_lat := 0.0
@@ -122,7 +145,7 @@ var speed: float:
 ##   roll -1..1, boost bool
 func step(delta: float, cmd: Dictionary) -> void:
 	if spec == null:
-		set_armor("mk3")
+		set_armor("mk1")
 
 	_rotate(delta, cmd)
 
@@ -232,6 +255,44 @@ func step(delta: float, cmd: Dictionary) -> void:
 	velocity += accel * delta
 	position += velocity * delta
 	_resolve_ground()
+	_walk(delta, cmd)
+
+## Walking and running, which only exist while both feet are down and the thrusters are
+## idle. The moment the suit lights up it is flying again and this does nothing: an armour
+## that keeps jogging while its boots are burning is two locomotion systems fighting.
+func _walk(delta: float, cmd: Dictionary) -> void:
+	if not grounded or thrust_mag > 0.1:
+		ground_speed = 0.0
+		return
+
+	var ask: Vector2 = cmd.get("walk", Vector2.ZERO)
+	var mag := clampf(ask.length(), 0.0, 1.0)
+
+	var want := Vector3.ZERO
+	if mag > 0.08:
+		# Stick up is forward, and forward is wherever the suit is facing — the camera sits
+		# behind it, so the two agree without the player having to think about it.
+		var dir := basis_ * Vector3(ask.x, 0.0, -ask.y)
+		dir.y = 0.0
+		if dir.length_squared() > 1e-6:
+			var gear: float = (WALK_SPEED * mag / WALK_GEAR if mag < WALK_GEAR
+				else lerpf(WALK_SPEED, RUN_SPEED, (mag - WALK_GEAR) / (1.0 - WALK_GEAR)))
+			want = dir.normalized() * gear
+
+	var v := Vector3(velocity.x, 0.0, velocity.z)
+	v = v.move_toward(want, (GROUND_ACCEL if mag > 0.08 else GROUND_FRICTION) * delta)
+	velocity.x = v.x
+	velocity.z = v.z
+
+	ground_speed = v.length()
+	stride_phase += ground_speed * delta / STRIDE
+
+	# A suit stood on its feet stands UP. Pitch and roll survive from whatever attitude it
+	# landed in, and without this it walks around the plate leaning forty degrees over.
+	var k := 1.0 - exp(-delta * 9.0)
+	pitch = lerpf(pitch, 0.0, k)
+	roll = lerpf(roll, 0.0, k)
+	basis_ = Basis.from_euler(Vector3(pitch, yaw, roll), EULER_ORDER_YXZ)
 
 ## Hold a point in the air, badly enough to be interesting.
 ## RETURNS the force to add, rather than taking `f` and modifying it. Vector3 is a VALUE
@@ -252,7 +313,13 @@ func _hover(delta: float, cmd: Dictionary) -> Vector3:
 	#
 	# So: airborne and not being asked to go anywhere means hold station, whatever the
 	# current speed. The auto-brake kills the speed and this holds what is left.
-	var want := not grounded and asking < 0.15
+	# CLEARANCE, not the grounded flag. `grounded` is resolved at the END of the step, so on
+	# the frame the suit touches down it is still false here — and the stabiliser, which
+	# carries the suit's whole weight, would fire once and lift it straight back off. A suit
+	# placed on the plate never stayed there: it bobbed up and hovered a metre over it, and
+	# the walk could not start because the feet were never down.
+	var clearance := position.y - (ground_y + 1.0)
+	var want := not grounded and clearance > 0.06 and asking < 0.15
 	if not want:
 		hover_active = false
 		hover_correction = hover_correction.lerp(Vector3.ZERO, 1.0 - exp(-delta / 0.25))
