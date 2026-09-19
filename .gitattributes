@@ -1,0 +1,5 @@
+# Godot and the scripts are text. Without this, git on Windows rewrites every file to
+# CRLF on checkout and the laptop reports the whole project as modified on every pull.
+* text=auto eol=lf
+*.glb binary
+*.png binary
