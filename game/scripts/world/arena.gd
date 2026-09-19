@@ -5,7 +5,7 @@ extends Node3D
 ## so a solo run and an eight-player room take exactly the same code path. A solo run IS a
 ## room with one peer in it — that is what "multiplayer from day one" buys.
 
-var city: City
+var stage: Stage
 var suits: Dictionary = {}          ## peer id -> SuitPilot
 var _publish_acc := 0.0
 const PUBLISH_HZ := 20.0
@@ -15,9 +15,9 @@ func _ready() -> void:
 	# between "it launched and rendered nothing" and "it never launched".
 	print("[mark zero] arena starting — display %s, renderer %s" % [
 		DisplayServer.get_name(), RenderingServer.get_video_adapter_name()])
-	city = City.new()
-	city.name = "City"
-	add_child(city)
+	stage = Stage.new()
+	stage.name = "Stage"
+	add_child(stage)
 	_sky()
 	Net.peers_changed.connect(_sync_suits)
 	_sync_suits()
@@ -63,10 +63,11 @@ func _sync_suits() -> void:
 		if not suits.has(id):
 			var s := SuitPilot.new()
 			s.name = "Suit_%d" % id
-			s.setup(id, Net.players[id].get("armor", "mk3"), city)
+			s.setup(id, Net.players[id].get("armor", "mk1"), stage)
 			# Spread the spawns down the avenue so nobody starts inside anybody.
 			var i := suits.size()
-			s.position = Vector3(0, 220, -city.span_z() * 0.35 + i * 25.0)
+			# On the plate, not two hundred metres up: the suit is the thing being looked at.
+			s.position = Vector3(i * 4.0, Stage.GROUND_Y + 1.0, 0)
 			add_child(s)
 			s.model.position = s.position
 			suits[id] = s

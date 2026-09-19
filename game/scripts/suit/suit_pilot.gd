@@ -20,14 +20,20 @@ const SUITS := {
 }
 ## Point mass to soles, from CONTRACT.md.
 const FEET_DROP := 1.0
+## How far the world slows while the aim trigger is held.
+const AIM_TIME_SCALE := 0.22
 
 @export var peer_id := 1
-@export var armor_id := "mk3"
+@export var armor_id := "mk1"
+var health := 1.0
 
 var model: FlightModel
 var rig: Node3D
-var camera: Camera3D
-var _city: City
+var skel: SuitRig                          ## the pose machinery, indexed off `rig`
+var poses: Poses
+var camera: ChaseCamera
+var visor: Visor
+var _stage: Stage
 
 ## What a remote suit is heading towards. Position and rotation are published, never
 ## velocity: a remote suit that dead-reckons off stale velocity overshoots corners and
@@ -39,21 +45,26 @@ var _net_thrust := 0.0
 var is_mine: bool:
 	get: return peer_id == Net.my_id
 
-func setup(id: int, armor: String, city: City) -> void:
+func setup(id: int, armor: String, stage: Stage) -> void:
 	peer_id = id
 	armor_id = armor
-	_city = city
+	_stage = stage
 
 func _ready() -> void:
 	model = FlightModel.new()
 	model.set_armor(armor_id)
 	_load_rig(armor_id)
+	poses = Poses.new()
 	if is_mine:
-		camera = Camera3D.new()
-		camera.fov = 70.0
-		camera.far = 6000.0
-		add_child(camera)
-		camera.current = true
+		# The camera is a sibling in the world, not a child of the suit. A camera parented to
+		# something that pitches and rolls inherits every bit of that, so the horizon tumbles
+		# with the body — which is exactly what makes six-degree-of-freedom flight unplayable.
+		camera = ChaseCamera.new()
+		camera.name = "ChaseCamera"
+		get_parent().call_deferred("add_child", camera)
+		visor = Visor.new()
+		visor.name = "Visor"
+		add_child(visor)
 
 func _load_rig(id: String) -> void:
 	if rig != null:
@@ -67,6 +78,11 @@ func _load_rig(id: String) -> void:
 		push_warning("[suit] no rig for %s" % id)
 		return
 	add_child(rig)
+	skel = SuitRig.new()
+	skel.index(rig)
+	skel.set_pose("stand")
+	if visor != null and visor.hud != null:
+		visor.hud.set_armor_name(SuitSpecs.get_spec(id).name)
 
 func wear(id: String) -> void:
 	armor_id = id
@@ -84,39 +100,69 @@ func _physics_process(delta: float) -> void:
 func _step_local(delta: float) -> void:
 	var look := Pad.look(delta)
 	var move := Pad.move()
+	var aiming := Pad.retro() > 0.25          # L2 — see AIM_SLOWDOWN below
+
+	# FLIGHT IS ONE SPEED, NOT A THROTTLE.
+	#
+	# Jurek's call: "R2 - Lot (stała prędkość, nie ma throttle) + jakiś przycisk żeby wejść w
+	# naddźwiękową". It costs the analog throttle, which was the one thing a pad could do that
+	# a keyboard could not — but it buys the Iron Man reading, where flight is a state you are
+	# in rather than a pedal you modulate, and the only speed decision is whether to go
+	# supersonic. Simpler to fly and much easier to aim from.
+	var throttle := 1.0 if Pad.thrust() > 0.15 else 0.0
+
+	# Supersonic is Mk II and up: the Mk I is a flying oil drum and has no business breaking
+	# the sound barrier.
+	var supersonic := false
+	if throttle > 0.0 and Pad.pressed("boost") and armor_id != "mk1":
+		supersonic = true
+
+	# AIMING SLOWS THE WORLD, the way Marvel's Spider-Man does it. Time dilation rather than
+	# a zoom: it buys thinking time instead of magnifying the target, and it makes a snap
+	# decision at 300 m/s possible at all. The suit itself is NOT slowed as much as the world,
+	# which is what makes it feel like the armour is quick rather than the world being sticky.
+	Engine.time_scale = AIM_TIME_SCALE if aiming else 1.0
+
 	var cmd := {
-		thrust = Pad.thrust(),
-		retro = Pad.retro(),
+		thrust = throttle,
+		retro = 0.0,
 		lateral = move.x,
-		# Cross lifts, circle drops. The left stick's Y is pitch TRIM in the air rather than
-		# a second climb control: two ways to go up that disagree is how a player ends up
-		# fighting his own hands.
 		vertical = (1.0 if Pad.pressed("up") else 0.0) - (1.0 if Pad.pressed("down") else 0.0),
 		look = look,
 		roll = 0.0,
-		boost = Pad.pressed("boost"),
+		boost = supersonic,
+		aiming = aiming,
+		firing = Pad.pressed("fire"),
 	}
-	if _city != null:
-		model.ground_y = _city.ground_y
+	if _stage != null:
+		model.ground_y = _stage.ground_y
 
 	var was_flying := not model.grounded
 	var falling := model.velocity.y
 	model.step(delta, cmd)
 
-	# The pad is an output device too — see scripts/core/rumble.gd. The bed is the engine
-	# note you feel rather than hear; the landing knock is an event and interrupts it.
-	Rumble.set_flight(model.thrust_mag, model.g_force)
-	if was_flying and model.grounded:
-		# Scaled by the closing speed, so putting the feet down gently is a tap and arriving
-		# hard is a slam. 40 m/s is about terminal for a suit that has cut its thrust.
-		Rumble.landing(clampf(-falling / 40.0, 0.0, 1.0))
-
 	global_position = model.position
 	if rig != null:
 		rig.position = Vector3(0, -FEET_DROP, 0)
 		rig.basis = model.basis_
+	if skel != null:
+		poses.update(delta, model, cmd, skel)
+		skel.update_pose(delta)
+
+	Rumble.set_flight(model.thrust_mag, model.g_force)
+	if was_flying and model.grounded:
+		var f := clampf(-falling / 40.0, 0.0, 1.0)
+		Rumble.landing(f)
+		if f > 0.25:
+			poses.land_hard(f)
+
 	if camera != null:
-		_drive_camera(delta)
+		camera.follow(delta, model.position, model.basis_, model.speed, aiming,
+			model.spec.top_speed)
+	if visor != null and visor.hud != null:
+		# Real time, not scaled: the HUD must not sway in slow motion while aiming, or it
+		# reads as the helmet lagging rather than the world slowing.
+		visor.hud.feed(delta / maxf(0.05, Engine.time_scale), look, model.speed, health, aiming)
 
 func _step_remote(delta: float) -> void:
 	# 120 ms of smoothing: enough that a dropped packet is invisible, short enough that a
