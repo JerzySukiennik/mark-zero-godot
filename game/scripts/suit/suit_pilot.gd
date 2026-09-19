@@ -96,7 +96,18 @@ func _step_local(delta: float) -> void:
 	}
 	if _city != null:
 		model.ground_y = _city.ground_y
+
+	var was_flying := not model.grounded
+	var falling := model.velocity.y
 	model.step(delta, cmd)
+
+	# The pad is an output device too — see scripts/core/rumble.gd. The bed is the engine
+	# note you feel rather than hear; the landing knock is an event and interrupts it.
+	Rumble.set_flight(model.thrust_mag, model.g_force)
+	if was_flying and model.grounded:
+		# Scaled by the closing speed, so putting the feet down gently is a tap and arriving
+		# hard is a slam. 40 m/s is about terminal for a suit that has cut its thrust.
+		Rumble.landing(clampf(-falling / 40.0, 0.0, 1.0))
 
 	global_position = model.position
 	if rig != null:

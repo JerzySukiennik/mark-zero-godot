@@ -44,16 +44,30 @@ if ($GodotExe) {
 }
 
 # ---- 2. the game -----------------------------------------------------------------------
+# GIT WRITES TO STDERR WHEN IT SUCCEEDS. "Cloning into '...'" is progress, not a problem —
+# but with $ErrorActionPreference = 'Stop' PowerShell turns any native stderr output into a
+# terminating NativeCommandError, so the installer aborted immediately AFTER a clone that had
+# in fact worked perfectly. Native commands are therefore run with the preference relaxed and
+# judged on $LASTEXITCODE, which is the only thing that actually says whether git succeeded.
+function Invoke-Native([scriptblock]$block) {
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { & $block 2>&1 | Out-Null } finally { $ErrorActionPreference = $old }
+    return ($LASTEXITCODE -eq 0)
+}
+
 $hasGit = [bool](Get-Command git -ErrorAction SilentlyContinue)
 if (Test-Path (Join-Path $Repo '.git')) {
     Say "Updating the game..."
     Push-Location $Repo
-    & git pull --ff-only 2>&1 | Out-Null
+    $pulled = Invoke-Native { git pull --ff-only }
     Pop-Location
-    Ok "Game up to date"
+    if ($pulled) { Ok "Game up to date" } else { Warn "Could not update - keeping the copy you have" }
 } elseif ($hasGit) {
     Say "Downloading the game..."
-    & git clone --depth 1 https://github.com/JerzySukiennik/mark-zero-godot.git $Repo 2>&1 | Out-Null
+    if (-not (Invoke-Native { git clone --depth 1 https://github.com/JerzySukiennik/mark-zero-godot.git $Repo })) {
+        throw "git clone failed"
+    }
     Ok "Game downloaded"
 } else {
     # No git: take the zip GitHub serves for the branch. Updating later still works, it
@@ -81,7 +95,7 @@ if ($done) {
     Ok "Suits already imported"
 } else {
     Say "Importing the suits - a window will open and close itself, give it a minute"
-    & $GodotExe --editor --path $Project --quit-after 4000 2>&1 | Out-Null
+    Invoke-Native { & $GodotExe --editor --path $Project --quit-after 4000 } | Out-Null
     if ((Test-Path $imported) -and (Get-ChildItem $imported -Filter '*.scn' -ErrorAction SilentlyContinue)) {
         Ok "Suits imported"
     } else {

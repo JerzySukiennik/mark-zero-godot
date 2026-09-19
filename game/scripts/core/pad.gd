@@ -75,6 +75,11 @@ func _rescan() -> void:
 	var pads := Input.get_connected_joypads()
 	connected = pads.size() > 0
 	device = pads[0] if connected else -1
+	# Haptics go to the same pad we read from. Told once here rather than passed around,
+	# because a rumble sent to a disconnected device is silently dropped and looks like the
+	# effect simply not firing.
+	if connected:
+		Rumble.set_device(device)
 
 # ---- analog reads ----------------------------------------------------------------------
 # All of these return 0 when no pad is attached, so nothing downstream has to check.
