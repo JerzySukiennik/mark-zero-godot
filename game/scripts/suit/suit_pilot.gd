@@ -36,6 +36,8 @@ var model: FlightModel
 var rig: Node3D
 var skel: SuitRig                          ## the pose machinery, indexed off `rig`
 var poses: Poses
+var fx: Thrusters
+var trail: Contrail
 var camera: ChaseCamera
 var visor: Visor
 var _stage: Stage
@@ -60,6 +62,11 @@ func _ready() -> void:
 	model.set_armor(armor_id)
 	_load_rig(armor_id)
 	poses = Poses.new()
+	fx = Thrusters.new()
+	add_child(fx)
+	# The trail is parented to the WORLD, not the suit: puffs must stay where they were made.
+	trail = Contrail.new()
+	get_parent().call_deferred("add_child", trail)
 	if is_mine:
 		# The camera is a sibling in the world, not a child of the suit. A camera parented to
 		# something that pitches and rolls inherits every bit of that, so the horizon tumbles
@@ -86,6 +93,10 @@ func _load_rig(id: String) -> void:
 	skel = SuitRig.new()
 	skel.index(rig)
 	skel.set_pose("stand")
+	# Re-parented onto whatever rig is worn now: the pivots are new objects every time an
+	# armour loads, and a plume left on a discarded rig never appears again.
+	if fx != null:
+		fx.attach(skel)
 	if visor != null and visor.hud != null:
 		visor.hud.set_armor_name(SuitSpecs.get_spec(id).name)
 
@@ -163,6 +174,14 @@ func _step_local(delta: float) -> void:
 	if skel != null:
 		poses.update(delta, model, cmd, skel)
 		skel.update_pose(delta)
+
+	if fx != null:
+		fx.drive(delta, thrust, cmd["lateral"], cmd["vertical"], retro)
+	if trail != null:
+		# From the SOLES, which is where the boots are — a trail from the point mass hangs a
+		# metre above the exhaust it is supposed to be coming out of.
+		trail.update(delta, model.position - Vector3(0, FEET_DROP * 0.8, 0),
+			model.speed, model.speed / 343.0, model.basis_)
 
 	Rumble.set_flight(model.thrust_mag, model.g_force)
 	if was_flying and model.grounded:
