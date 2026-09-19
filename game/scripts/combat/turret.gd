@@ -23,6 +23,9 @@ const DEPLOY_TIME := 0.34
 const STOW_AFTER := 3.0          ## seconds of not firing before it packs itself away
 const COOLDOWN := 0.55
 const SPEED := 340.0
+## Heavier than a repulsor bolt per round, and slower, so the shoulder gun is the answer to
+## something standing still rather than something moving.
+const DAMAGE := 18.0
 const LIFE := 3.0
 const POOL := 8
 const DRAIN := 0.2               ## a fifth of the magazine per shot: four shots, then wait
@@ -212,6 +215,22 @@ func _physics_process(delta: float) -> void:
 		if not s.live:
 			continue
 		s.life -= delta
+		# Swept, like every other projectile here: fast rounds tunnel through people if
+		# you only ever test where they ended up.
+		if is_inside_tree():
+			var space := get_world_3d().direct_space_state
+			var from: Vector3 = (s.node as Node3D).global_position
+			var q := PhysicsRayQueryParameters3D.create(from, from + s.vel * delta)
+			q.collide_with_areas = false
+			var hit := space.intersect_ray(q)
+			if not hit.is_empty():
+				var who = hit.get("collider", null)
+				if who != null and who.has_method("take_hit"):
+					who.take_hit(DAMAGE, from, "turret")
+				s.live = false
+				s.node.visible = false
+				s.light.light_energy = 0.0
+				continue
 		s.node.position += s.vel * delta
 		if s.life <= 0.0:
 			s.live = false
@@ -230,9 +249,17 @@ func _pose() -> void:
 	var barrel_t: float = clampf((d - 0.6) / 0.4, 0.0, 1.0)
 
 	for c in _covers:
+		# GUARDED. The turret's geometry is parented to the RIG, and the rig is thrown away
+		# whenever the armour changes or the player switches hero — so these nodes go with
+		# it while this still holds references to them. Assigning through one of those is
+		# "invalid previously freed instance", once per frame, forever.
+		if not is_instance_valid(c.node):
+			return
 		var node: Node3D = c.node
 		node.rotation = Vector3(0, 0, c.side * -covers_t * 1.25)
 
+	if not is_instance_valid(_housing) or not is_instance_valid(_barrel):
+		return
 	_housing.visible = d > 0.02
 	_housing.position = Vector3(0, -0.055 * rise_t, 0)
 	_housing.scale = Vector3.ONE * (0.35 + 0.65 * rise_t)

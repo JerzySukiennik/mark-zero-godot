@@ -26,6 +26,9 @@ const GROUND_TIME := 1.85
 const AIR_TURN := TAU
 const GROUND_TURN := PI * 1.15
 const RANGE := 60.0
+## Damage a SECOND. The sweep passes over a man in a fraction of one, so this is high on
+## purpose: what it costs is the whole charge and being a sitting target while it runs.
+const DPS := 260.0
 const CHARGE_COST := 1.0
 ## The suit charges from electrical damage taken, cables, and the like. Rare on purpose:
 ## this is a thing you earn, not a cooldown you wait out.
@@ -179,6 +182,12 @@ func update(_delta: float) -> void:
 	var hit := space.intersect_ray(q)
 	if hit.has("position"):
 		to = hit["position"]
+		# IT CUTS. Continuous rather than per-shot, because the move is a sweep: standing
+		# in it for a quarter of a second is what a hit means here, and that is exactly
+		# what "ten laser przecina wszystkich wrogów dookoła" describes.
+		var who = hit.get("collider", null)
+		if who != null and who.has_method("take_hit"):
+			who.take_hit(DPS * _delta, to, "laser")
 
 	var len := maxf(0.05, from.distance_to(to))
 	# THE BASIS IS BUILT BY HAND, because look_at cannot be used here. A CylinderMesh runs

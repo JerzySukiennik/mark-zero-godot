@@ -6,6 +6,7 @@ extends Node3D
 ## room with one peer in it — that is what "multiplayer from day one" buys.
 
 var stage: Stage
+var squad: Squad
 var suits: Dictionary = {}          ## peer id -> SuitPilot
 var _publish_acc := 0.0
 const PUBLISH_HZ := 20.0
@@ -18,6 +19,11 @@ func _ready() -> void:
 	stage = Stage.new()
 	stage.name = "Stage"
 	add_child(stage)
+	# The opposition. Built after the stage so it can put people on the plate, and before
+	# the suits so a spawn on the first frame already has somewhere to stand.
+	squad = Squad.new()
+	squad.setup(stage)
+	add_child(squad)
 	_sky()
 	# DEFERRED. Switching hero frees the entity whose own menu emitted the change, from
 	# inside that signal; rebuilding the roster on the next idle frame keeps the teardown

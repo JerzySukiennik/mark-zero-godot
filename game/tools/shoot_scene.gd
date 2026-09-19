@@ -33,11 +33,11 @@ func _process(_d: float) -> void:
 			return
 		# In the air, with the sticks reading zero — which IS the hover case, the one where
 		# the boots were dark.
-		_pilot.model.position = Vector3(0, 60, 0)
+		_pilot.model.position = Vector3(0, 14, 0)
 		_pilot.model.grounded = false
 		return
 
-	if _i < 260:
+	if _i < 900:
 		# An isolation pass: "only", "noflame", "nofog", "nosparks" or nothing.
 		var only := ""
 		for a in OS.get_cmdline_user_args():
@@ -55,9 +55,9 @@ func _process(_d: float) -> void:
 		# Our own camera, low and close: the boots are what is being judged here.
 		_cam = Camera3D.new()
 		add_child(_cam)
-		_cam.global_position = _pilot.model.position + Vector3(4.0, -1.2, 6.5)
-		_cam.look_at(_pilot.model.position + Vector3(0, -0.8, 0), Vector3.UP)
-		_cam.fov = 45.0
+		_cam.global_position = _pilot.model.position + Vector3(10.0, 6.0, 22.0)
+		_cam.look_at(_pilot.model.position + Vector3(0, -6.0, -14.0), Vector3.UP)
+		_cam.fov = 58.0
 		_cam.current = true
 		return
 	var img := get_viewport().get_texture().get_image()

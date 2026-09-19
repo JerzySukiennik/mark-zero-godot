@@ -131,6 +131,11 @@ func _physics_process(delta: float) -> void:
 			q.collide_with_areas = false
 			var hit := space.intersect_ray(q)
 			if not hit.is_empty():
+				# THIS IS WHAT THE WEBBING IS FOR. The splat on a wall was always the
+				# placeholder; the point was ever "sklejać wrogów".
+				var who = hit.get("collider", null)
+				if who != null and who.has_method("web_hit"):
+					who.web_hit(1.0)
 				_splat(hit["position"], hit.get("normal", Vector3.UP))
 				g.live = false
 				g.node.visible = false

@@ -84,6 +84,10 @@ func setup(id: int, stage: Stage) -> void:
 	_stage = stage
 
 func _ready() -> void:
+	add_to_group("player")
+	add_to_group("hittable")
+	# Something for incoming fire to hit; see scripts/combat/hurtbox.gd.
+	add_child(Hurtbox.new(self, 0.52, 1.85))
 	model = SpiderModel.new()
 	model.position = position
 	_load_body()
@@ -136,6 +140,8 @@ func _physics_process(delta: float) -> void:
 	if not is_mine:
 		return
 
+	_hurt_cool = maxf(0.0, _hurt_cool - delta)
+	_hurt_flash = maxf(0.0, _hurt_flash - delta)
 	var move := Pad.move()
 	var look := Pad.look(delta)
 	# NO AIM TRIGGER. L2 is the left web now, and it was ALSO slowing the world to a third
@@ -476,3 +482,32 @@ func _exit_tree() -> void:
 	for n: Node in doomed:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
+
+## ---- taking fire ---------------------------------------------------------------------
+## The same method name every weapon in the game looks for, on both heroes and on the
+## thugs. One contract rather than a type check per shooter: a bullet does not care what
+## it hit, only that the thing knew how to be hurt.
+##
+## `health` is a FRACTION, because the integrity bar has always drawn it as one — so the
+## damage numbers in EnemyKinds, which are in points, are divided by the armour's total
+## here rather than everywhere they are written.
+const MAX_HP := 100.0
+## Seconds of grace after a hit lands. Without it a burst from a rifle at 120 Hz is one
+## unbroken stream of damage and a crowd is instantly lethal.
+const HURT_GRACE := 0.12
+var _hurt_cool := 0.0
+var _hurt_flash := 0.0
+
+func take_hit(amount: float, from: Vector3, kind := "") -> void:
+	if _hurt_cool > 0.0 or health <= 0.0:
+		return
+	_hurt_cool = HURT_GRACE
+	health = clampf(health - amount / MAX_HP, 0.0, 1.0)
+	_hurt_flash = 0.35
+	Rumble.hit(0.7, 0.45, 0.14)
+	# Shoved by what hit you. Small — being knocked about by rifle fire would take the
+	# flight model out of the player's hands, which is the one thing it must never do.
+	var push := global_position - from
+	push.y *= 0.3
+	if push.length_squared() > 1e-4 and model != null:
+		model.velocity += push.normalized() * amount * 0.06

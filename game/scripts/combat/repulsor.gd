@@ -38,6 +38,9 @@ const DRAIN := 1.0 / SHOTS
 ## Seconds to put one shot back.
 const RELOAD_PER_SHOT := 1.5
 const RECHARGE := 1.0 / (SHOTS * RELOAD_PER_SHOT)
+## What one bolt takes off. Sized against EnemyKinds: three drop a thug, five a rifleman,
+## and a brute needs most of a magazine — so the big one is a decision, not a speed bump.
+const DAMAGE := 12.0
 
 signal fired(hand: String)
 
@@ -193,6 +196,26 @@ func _physics_process(delta: float) -> void:
 			continue
 		b.life -= delta
 		var step := b.vel * delta
+
+		# SWEPT AGAINST THE WORLD. Until there was anything solid to find, these simply
+		# flew for three seconds and expired — the shot existed, the hit did not. At 260 m/s
+		# a 120 Hz frame covers two metres, which is wider than a man, so testing the end
+		# point alone would let bolts pass through people.
+		if is_inside_tree():
+			var space := get_world_3d().direct_space_state
+			var from := b.node.global_position
+			var q := PhysicsRayQueryParameters3D.create(from, from + step)
+			q.collide_with_areas = false
+			var hit := space.intersect_ray(q)
+			if not hit.is_empty():
+				var who = hit.get("collider", null)
+				if who != null and who.has_method("take_hit"):
+					who.take_hit(DAMAGE, from, "repulsor")
+				b.live = false
+				b.node.visible = false
+				b.light.light_energy = 0.0
+				continue
+
 		b.node.position += step
 		# The streak is exactly as long as the ground covered this frame, so it is honest
 		# about speed rather than a decorative fixed-length smear.
