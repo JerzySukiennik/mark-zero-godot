@@ -85,24 +85,24 @@ if (Test-Path (Join-Path $Repo '.git')) {
 $Project = Join-Path $Repo 'game'
 if (-not (Test-Path (Join-Path $Project 'project.godot'))) { throw "project.godot missing from $Project" }
 
-# ---- 3. the first import ----------------------------------------------------------------
-# The six suit models must be imported before they appear. Scene importers do NOT run under
-# --headless: measured on the Mac, it reports no error at all and simply leaves the models
-# marked invalid. So this opens the real editor briefly and lets it finish the job.
-$imported = Join-Path $Project '.godot\imported'
-$done = (Test-Path $imported) -and (Get-ChildItem $imported -Filter '*.scn' -ErrorAction SilentlyContinue)
-if ($done) {
-    Ok "Suits already imported"
-} else {
-    Say "Importing the suits - a window will open and close itself, give it a minute"
-    Invoke-Native { & $GodotExe --editor --path $Project --quit-after 4000 } | Out-Null
-    if ((Test-Path $imported) -and (Get-ChildItem $imported -Filter '*.scn' -ErrorAction SilentlyContinue)) {
-        Ok "Suits imported"
-    } else {
-        Warn "They did not import on their own. Open the editor once by hand:"
-        Warn "  & `"$GodotExe`" --editor --path `"$Project`""
-    }
-}
+# ---- 3. refresh the class registry --------------------------------------------------------
+# ALWAYS, not only on a fresh install.
+#
+# Godot keeps a list of every class_name in the project, and that list is built by an import
+# pass. Pull a commit that adds new scripts and the list is stale until the next import, so
+# the new classes simply do not exist. Measured: two test suites that pass on the Mac failed
+# on the laptop with a parse error, same files and same engine build, purely because
+# Repulsors, ShoulderTurret and WristLaser had not been registered there yet.
+#
+# That is a confusing failure to hit - it looks like code that only breaks on one computer -
+# so this runs every time. It costs a few seconds.
+#
+# The suit MODELS do not need this: they are parsed at runtime from their own bytes,
+# precisely because Godot's importer refuses them. See game/tools/README-models.md.
+Say "Refreshing the project..."
+Invoke-Native { & $GodotExe --headless --path $Project --import } | Out-Null
+Ok "Project refreshed"
+
 
 # ---- 4. something to double-click --------------------------------------------------------
 $desktop = [Environment]::GetFolderPath('Desktop')
