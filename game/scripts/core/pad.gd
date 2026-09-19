@@ -18,12 +18,14 @@ signal pad_changed(connected: bool)
 
 ## Action name -> [JoyButton] . One place, read by both the InputMap setup and the glyphs.
 const BUTTONS := {
-	"fire":        JOY_BUTTON_RIGHT_SHOULDER,   # R1
-	"boost":       JOY_BUTTON_LEFT_SHOULDER,    # L1
+	"fire_r":      JOY_BUTTON_RIGHT_SHOULDER,   # R1 — right palm
+	"fire_l":      JOY_BUTTON_LEFT_SHOULDER,    # L1 — left palm
+	"turret":      JOY_BUTTON_X,                # square — shoulder turret
+	"menu":        JOY_BUTTON_MISC1,             # touchpad click
 	"up":          JOY_BUTTON_A,                # cross
-	"down":        JOY_BUTTON_B,                # circle
-	"interact":    JOY_BUTTON_X,                # square
-	"suit_toggle": JOY_BUTTON_Y,                # triangle
+	"down":        JOY_BUTTON_LEFT_SHOULDER,    # L1 is also descend when not firing
+	"interact":    JOY_BUTTON_Y,                # triangle
+	"suit_toggle": JOY_BUTTON_B,                # circle
 	"hover":       JOY_BUTTON_LEFT_STICK,       # L3
 	"faceplate":   JOY_BUTTON_RIGHT_STICK,      # R3
 	"pause":       JOY_BUTTON_START,            # options
@@ -33,9 +35,10 @@ const BUTTONS := {
 
 ## What the player is told to press. PlayStation names, because the pad is a DualShock.
 const GLYPH := {
-	"fire": "R1", "boost": "L1", "up": "✕", "down": "○", "interact": "□",
-	"suit_toggle": "△", "hover": "L3", "faceplate": "R3", "pause": "OPTIONS",
-	"thrust": "R2", "retro": "L2", "move": "L STICK", "look": "R STICK",
+	"fire_r": "R1", "fire_l": "L1", "turret": "□", "up": "✕", "down": "L1",
+	"menu": "TOUCHPAD", "interact": "△",
+	"suit_toggle": "○", "hover": "L3", "faceplate": "R3", "pause": "OPTIONS",
+	"supersonic": "R2", "aim": "L2", "move": "L STICK", "look": "R STICK",
 	"ui_accept_pad": "✕", "ui_back": "○",
 }
 

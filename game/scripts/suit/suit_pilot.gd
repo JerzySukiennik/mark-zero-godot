@@ -37,6 +37,7 @@ var rig: Node3D
 var skel: SuitRig                          ## the pose machinery, indexed off `rig`
 var poses: Poses
 var fx: Thrusters
+var guns: Repulsors
 var trail: Contrail
 var camera: ChaseCamera
 var visor: Visor
@@ -64,6 +65,10 @@ func _ready() -> void:
 	poses = Poses.new()
 	fx = Thrusters.new()
 	add_child(fx)
+	# Bolts live in the WORLD, not on the suit: one parented to the armour would fly along
+	# with it, which is a laser pointer rather than a projectile.
+	guns = Repulsors.new()
+	get_parent().call_deferred("add_child", guns)
 	# The trail is parented to the WORLD, not the suit: puffs must stay where they were made.
 	trail = Contrail.new()
 	get_parent().call_deferred("add_child", trail)
@@ -158,7 +163,7 @@ func _step_local(delta: float) -> void:
 		roll = 0.0,
 		boost = supersonic,
 		aiming = aiming,
-		firing = Pad.pressed("fire"),
+		firing = Pad.pressed("fire_r") or Pad.pressed("fire_l"),
 	}
 	if _stage != null:
 		model.ground_y = _stage.ground_y
@@ -183,6 +188,8 @@ func _step_local(delta: float) -> void:
 		trail.update(delta, model.position - Vector3(0, FEET_DROP * 0.8, 0),
 			model.speed, model.speed / 343.0, model.basis_)
 
+	_shoot(aiming)
+
 	Rumble.set_flight(model.thrust_mag, model.g_force)
 	if was_flying and model.grounded:
 		var f := clampf(-falling / 40.0, 0.0, 1.0)
@@ -197,6 +204,33 @@ func _step_local(delta: float) -> void:
 		# Real time, not scaled: the HUD must not sway in slow motion while aiming, or it
 		# reads as the helmet lagging rather than the world slowing.
 		visor.hud.feed(delta / maxf(0.05, Engine.time_scale), look, model.speed, health, aiming)
+		if guns != null:
+			visor.hud.repulsor_l = guns.charge["L"]
+			visor.hud.repulsor_r = guns.charge["R"]
+
+## RAPID-PRESS, NOT HOLD. Jurek's rule, from Marvel's Spider-Man: while aiming you tap R1
+## and L1 as fast as you can and each tap is a shot. So these are just-pressed edges rather
+## than held state — holding does nothing, which is deliberate. A held trigger is a machine
+## gun; a tapped one is a fight you are participating in.
+func _shoot(aiming: bool) -> void:
+	if guns == null or skel == null:
+		return
+	for hand: String in ["R", "L"]:
+		if not Pad.just_pressed("fire_" + hand.to_lower()):
+			continue
+		var pivot_name: String = "piv_palm" + hand
+		if not skel.has_pivot(pivot_name):
+			continue
+		var muzzle: Vector3 = (skel.pivots[pivot_name] as Node3D).global_position
+		var target := Repulsors.aim_point(camera, muzzle)
+		var kick := guns.fire(hand, muzzle, target)
+		if kick != Vector3.ZERO:
+			# RECOIL MOVES THE SUIT. Firing downward should lift you — a repulsor is a
+			# thruster you are pointing at something else, so it has to push back.
+			model.velocity += kick
+			if visor != null and visor.hud != null:
+				visor.hud.repulsor_l = guns.charge["L"]
+				visor.hud.repulsor_r = guns.charge["R"]
 
 func _step_remote(delta: float) -> void:
 	# 120 ms of smoothing: enough that a dropped packet is invisible, short enough that a
