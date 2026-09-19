@@ -354,10 +354,39 @@ def empty(name, size=0.05):
     return e
 
 
-def aim_quat(direction):
-    """Blender-space quaternion whose local -Y points along `direction` (spec space)."""
+def aim_quat(direction, axis='-Z', up='Y'):
+    """Quaternion putting the exported node's local -Y along `direction` (spec space).
+
+    READ THIS BEFORE CHANGING IT. The contract's emitters are defined on the glTF
+    node's local -Y. That is NOT Blender's local -Y: the exporter's Y-up conversion is
+    conjugated into every node's rotation, so a Blender local axis (x, y, z) leaves as
+    the glTF local axis (x, z, -y). Blender's local -Z is therefore what arrives as
+    glTF's local -Y, and aiming Blender's own -Y lands the emitter on glTF +Z — a
+    repulsor firing out of the back of the hand, measurably, in the exported file.
+
+    Aim Blender's -Z. Verified by parsing the .glb and by Godot's own probe.
+    """
     d = Vector(B(direction)).normalized()
-    return d.to_track_quat('-Y', 'Z')
+    return d.to_track_quat(axis, up)
+
+
+def frame_quat(xa, ya, za):
+    """Quaternion whose EXPORTED local axes are exactly the spec vectors given.
+
+    Same conjugation story as aim_quat: build the basis from B()-mapped spec axes and
+    the exporter's Y-up conversion cancels back out, so the glTF node's local X, Y, Z
+    are xa, ya, za in the character's own frame. Used for the web-shooter fingers,
+    whose whole point is that the game folds them with ONE local-X rotation.
+    """
+    import mathutils
+    # The exporter maps Blender's local X, Y, Z onto glTF's local X, -Z, Y. So the
+    # Blender basis that DELIVERS (xa, ya, za) is (xa, -za, ya), not (xa, ya, za).
+    m = mathutils.Matrix()
+    neg_za = tuple(-c for c in za)
+    for i, a in enumerate((xa, neg_za, ya)):
+        v = Vector(B(a)).normalized()
+        m[0][i], m[1][i], m[2][i] = v.x, v.y, v.z
+    return m.to_quaternion()
 
 
 def stats(objs):

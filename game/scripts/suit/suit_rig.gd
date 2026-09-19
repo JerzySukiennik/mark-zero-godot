@@ -207,6 +207,16 @@ func set_pose(name: String) -> void:
 		_target[p] = q
 		chain[p] = q_parent * q
 
+## Points ONE joint, after a pose has been chosen.
+##
+## For limbs no authored pose mentions — the Iron Spider's four back legs — which set_pose
+## leaves parked at rest forever because they appear in none of the six POSES entries.
+## Adding them to all six instead would mean forty-eight lines describing a stowed leg.
+func aim_joint(name: String, dir: Vector3, twist: float = 0.0) -> void:
+	if not pivots.has(name):
+		return
+	_target[name] = _aim_joint(name, dir, twist)
+
 ## Blend several poses at once. `weights` is name -> 0..1; they need not sum to one.
 func set_pose_weights(weights: Dictionary) -> void:
 	var first := true

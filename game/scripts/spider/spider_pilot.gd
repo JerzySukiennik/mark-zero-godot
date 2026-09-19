@@ -19,6 +19,10 @@ const BODIES := [
 	"res://assets/suits/mk50.glb",
 	"res://assets/suits/pilot.glb",
 ]
+## How far the fingers fold for the thwip, from assets/suits/ironspider-notes.md. The
+## pivot's frame is authored so the SIGN is the same on both hands, which is why this is
+## one number rather than a mirrored pair.
+const THWIP_ANGLE := deg_to_rad(95.0)
 const FEET_DROP := 1.0
 const AIM_TIME_SCALE := 0.35
 
@@ -29,6 +33,7 @@ var skel: SuitRig
 var camera: ChaseCamera
 var visor: Visor
 var health := 1.0
+var legs := SpiderLegs.new()
 
 ## One per hand. Right is R1, left is L1 — the same hands the armour fires from, so the
 ## two characters do not need separate muscle memory.
@@ -129,6 +134,9 @@ func _physics_process(delta: float) -> void:
 		rig.basis = model.basis_
 	if skel != null:
 		_pose(delta)
+		# The legs come out whenever he is off the ground — they are what he lands and
+		# catches himself on, so they belong to being airborne rather than to a button.
+		legs.drive(delta, not model.grounded, skel)
 		skel.update_pose(delta)
 
 	_draw_webs()
@@ -242,6 +250,11 @@ func _pose(_delta: float) -> void:
 			continue
 		skel.add_offset("piv_shoulder" + hand, Poses.X_AX, -1.25 * reach)
 		skel.add_offset("piv_elbow" + hand, Poses.X_AX, -0.7 * reach)
+		# THE THWIP. Two fingers folded to the palm, and it is one clean rotation because
+		# the model was authored for exactly that. It snaps shut with the throw and relaxes
+		# while the web is held, so a hand carrying a rope is not still mid-gesture.
+		var fold: float = maxf(th, hold * 0.45)
+		skel.add_offset("piv_fingers" + hand, Poses.X_AX, THWIP_ANGLE * fold)
 
 	# Hanging, the legs tuck and trail. A figure on a rope with its legs straight down is a
 	# plumb bob, and reads as one.

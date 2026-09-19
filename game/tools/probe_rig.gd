@@ -13,7 +13,7 @@ func _walk(n: Node, xf: Transform3D, out: Dictionary) -> void:
 		_walk(c, here, out)
 
 func _initialize() -> void:
-	for id: String in ["mk1", "mk3", "mk50"]:
+	for id: String in ["ironspider", "peter"]:
 		var scn := SuitLoader.load_suit("res://assets/suits/%s.glb" % id)
 		if scn == null:
 			print(id, ": no model"); continue
