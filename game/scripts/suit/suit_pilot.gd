@@ -59,11 +59,13 @@ func _load_rig(id: String) -> void:
 	if rig != null:
 		rig.queue_free()
 	var path: String = SUITS.get(id, SUITS["mk3"])
-	var packed: PackedScene = load(path)
-	if packed == null:
-		push_warning("[suit] %s would not load" % path)
+	# Through SuitLoader rather than load(): the models are parsed at runtime when the
+	# editor has never imported them, which is the difference between a game that has a
+	# suit in it and one that does not. See scripts/suit/suit_loader.gd.
+	rig = SuitLoader.load_suit(path)
+	if rig == null:
+		push_warning("[suit] no rig for %s" % id)
 		return
-	rig = packed.instantiate()
 	add_child(rig)
 
 func wear(id: String) -> void:
