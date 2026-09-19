@@ -117,6 +117,14 @@ func _process(_d: float) -> bool:
 	_ok(pa.y < sh.y - 0.35, "with the hands well below the shoulders")
 	_ok(h.thrust_mag >= FlightModel.HOVER_BURN, "and the repulsors are burning (%.2f)" % h.thrust_mag)
 
+	# AND THEY POINT DOWN. The boot jets leave along the ankle pivot's local -Y, so the
+	# foot's angle IS the exhaust angle: toes back at 0.60 aimed them thirty-seven degrees
+	# behind vertical, and a hovering suit was firing backwards while holding station.
+	var tl: Node3D = hs.pivots["piv_thrusterL"]
+	var jet: Vector3 = (tl.global_transform.basis * Vector3(0, -1, 0)).normalized()
+	_ok(rad_to_deg(jet.angle_to(Vector3.DOWN)) < 15.0,
+		"the boot jets fire straight down in a hover (%.0f deg off)" % rad_to_deg(jet.angle_to(Vector3.DOWN)))
+
 	print("=== the arms through a slide ===")
 	# A full sideways slide must produce a real ASYMMETRY — one arm reaching away from the
 	# turn, the other tucked across it — and neither hand may cross the body's centre line.

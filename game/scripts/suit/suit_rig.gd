@@ -94,8 +94,11 @@ static var POSES := {
 		"piv_hipR": { "dir": _d(-0.03, -0.999, -0.02) },
 		"piv_kneeL": { "dir": _d(0, -0.999, 0.03) },
 		"piv_kneeR": { "dir": _d(0, -0.999, 0.03) },
-		"piv_ankleL": { "dir": _d(0, -0.80, 0.60) },
-		"piv_ankleR": { "dir": _d(0, -0.80, 0.60) },
+		# Feet nearly flat, because the BOOT JETS point along the ankle and they are what is
+		# holding him up. Toes back at 0.60 aimed the exhaust thirty-seven degrees behind
+		# vertical — measured — so a hovering suit was firing backwards and down.
+		"piv_ankleL": { "dir": _d(0, -0.992, 0.13) },
+		"piv_ankleR": { "dir": _d(0, -0.992, 0.13) },
 		"piv_chest": { "dir": _d(0, 1.0, 0.0) },
 	},
 

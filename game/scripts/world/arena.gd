@@ -37,7 +37,12 @@ func _sky() -> void:
 	mat.sky_horizon_color = Color(0.82, 0.86, 0.90)
 	mat.ground_bottom_color = Color(0.20, 0.20, 0.22)
 	mat.ground_horizon_color = Color(0.62, 0.64, 0.66)
-	mat.sky_energy_multiplier = 1.25
+	# THE lever for a metal subject. Measured on the Mark I hovering: 1.25 gave a suit
+	# luminance of 0.195 and 2.60 gives 0.295, which is the difference between a black
+	# silhouette and readable plates and panel lines. Raising the LIGHTS did nothing for
+	# two rounds because metal has almost no diffuse response — what you see on it is the
+	# sky, so the sky is what has to be brighter.
+	mat.sky_energy_multiplier = 2.60
 	sky.sky_material = mat
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
@@ -46,7 +51,11 @@ func _sky() -> void:
 	# response — nearly everything you see on it is reflected environment. Lighting tuned for
 	# a city of flat concrete leaves the suit reading as a silhouette. Jurek: "strój jest
 	# zbyt ciemny."
-	env.ambient_light_energy = 1.35
+	# NOT the lever, measured: sweeping this from 1.35 to 2.30 moved the armour's brightness
+	# by 0.001. With ambient_light_source = SKY the sky's own energy is what drives both the
+	# ambient and the reflection, and a metal figure is almost entirely reflection. Left at
+	# a sane value rather than tuned.
+	env.ambient_light_energy = 1.60
 	env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	env.glow_enabled = true
 	env.glow_intensity = 0.5
@@ -79,7 +88,7 @@ func _sky() -> void:
 	# a metal figure reads as "too dark" even when the key light is strong.
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-18, 55, 0)
-	fill.light_energy = 0.55
+	fill.light_energy = 0.90
 	fill.light_color = Color(0.72, 0.82, 1.0)
 	fill.shadow_enabled = false
 	add_child(fill)

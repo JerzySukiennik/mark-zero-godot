@@ -82,6 +82,10 @@ func attach(rig: SuitRig) -> void:
 			boot = spec.boot,
 			core = _make_core(holder, scale_f),
 			glow = _make_glow(holder, scale_f),
+			# The unscaled lengths, so the jet can be kept hanging FROM the nozzle rather
+			# than centred on it.
+			core_h = 0.95 * scale_f,
+			glow_h = 1.50 * scale_f,
 			flame = _make_flame(holder, scale_f),
 			fog = _make_fog(holder, scale_f),
 			sparks = _make_sparks(holder, scale_f),
@@ -213,8 +217,10 @@ func _make_fog(parent: Node3D, s: float) -> FogVolume:
 ## amount together with the rest: they are what stops the plume looking like a smooth gas.
 func _make_sparks(parent: Node3D, s: float) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = 14
-	p.lifetime = 0.5
+	# "Za duzo tych drobinek odpadajacych" — the beams carry it, and every spark that is not
+	# obviously part of the blast reads as debris falling off the suit.
+	p.amount = 6
+	p.lifetime = 0.28
 	p.local_coords = false
 	var pm := ParticleProcessMaterial.new()
 	pm.direction = Vector3(0, -1, 0)
@@ -325,6 +331,13 @@ func drive(delta: float, thrust: float, lateral: float, vertical: float, braking
 			if mi.visible:
 				var stretch: float = 0.45 + lv * 1.25
 				mi.scale = Vector3(0.7 + lv * 0.45, stretch, 0.7 + lv * 0.45)
+				# A MeshInstance scales about its own origin, which sits at the middle of
+				# the cylinder — so lengthening the jet pushed half the extra length UP,
+				# back through the sole and out of the top of the boot. Jurek: "jakos jest
+				# za wysoko... nie wychodzi z tych miejsc odpowiednich." Re-hanging it each
+				# frame keeps the nozzle end pinned where the nozzle is.
+				var h: float = e.core_h if part == "core" else e.glow_h
+				mi.position.y = -h * stretch * 0.5
 				var mat: StandardMaterial3D = mi.material_override
 				var a: Color = mat.albedo_color
 				mat.albedo_color = Color(a.r, a.g, a.b,

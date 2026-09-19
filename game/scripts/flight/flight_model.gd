@@ -244,8 +244,12 @@ func step(delta: float, cmd: Dictionary) -> void:
 		var cap_now := (-velocity.y / delta) * spec.mass
 		f += basis_.inverse() * Vector3(0, minf(need, cap_now) * vert, 0)
 
+	# The RETRO burn counts too. It is the repulsors firing — harder than a cruise, if
+	# anything — and leaving it out meant that flying backwards reported no thrust at all,
+	# so the altitude assist stood down and the suit sank at 58 m/s while the player held
+	# the stick. It also means the exhaust lights during a braking burn, which it should.
 	thrust_mag = clampf((fwd * boost + absf(cmd.get("lateral", 0.0)) * 0.4
-		+ absf(vert) * 0.5) * power, 0.0, 1.6)
+		+ absf(vert) * 0.5 + back * 0.5) * power, 0.0, 1.6)
 
 	# ---- drag, anisotropic, in body axes ------------------------------------------------
 	var b := basis_.inverse() * velocity
@@ -279,8 +283,14 @@ func step(delta: float, cmd: Dictionary) -> void:
 	# Applied in WORLD up rather than body up, which is the whole point: banked thirty-five
 	# degrees into a turn, a body-frame lift loses a chunk of its vertical component and the
 	# suit mushes towards the ground exactly when the player is concentrating on the turn.
-	if not grounded and not hover_active and thrust_mag > 0.12:
-		var carry := clampf(thrust_mag / 0.6, 0.0, 1.0) * LIFT_ASSIST
+	if not grounded and not hover_active and thrust_mag > 0.10:
+		# Reaching full carry almost immediately, and NOT scaled by how the stick happens
+		# to be pushed. Ramping it over thrust_mag meant that flying pure sideways — where
+		# thrust_mag is only 0.4, because lateral contributes at 0.4 weight — carried two
+		# thirds of the weight and sank at 32 m/s while doing it. Holding altitude is not
+		# something the suit should do only when travelling forwards. This is the other
+		# half of "czasami po prostu totalnie nie chce leciec": it was flying, downhill.
+		var carry := clampf(thrust_mag / 0.18, 0.0, 1.0) * LIFT_ASSIST
 		f += basis_.inverse() * Vector3(0, G * spec.mass * carry, 0)
 
 	# ---- integrate ----------------------------------------------------------------------

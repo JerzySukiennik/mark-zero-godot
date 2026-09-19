@@ -124,5 +124,34 @@ func _initialize() -> void:
 		_ok(drop < 25.0, "flying %s for 10 s loses little height (%.0f m)" % [bank, drop])
 		_ok(a.speed > 40.0, "and it is actually flying (%.0f m/s)" % a.speed)
 
+	print("=== every direction on the stick ===")
+	# Jurek: pushed to a back-diagonal the suit "totalnie nie chce leciec i mega wolno
+	# leci". Measured around the whole circle it was two separate faults. Holding sideways
+	# or diagonally sank the suit at 30-60 m/s, because the altitude assist was scaled by
+	# thrust_mag and sideways only reports 0.4 of it — so it WAS flying, downhill. And a
+	# pure retro burn reported no thrust at all, so flying backwards had no assist either.
+	var worst_sink := 0.0
+	var slowest := 1e9
+	var fastest := 0.0
+	for deg in range(0, 360, 30):
+		var ang := deg_to_rad(float(deg))
+		var mv := Vector2(sin(ang), -cos(ang))      # stick: -y is forward, as the pad reports
+		var d := FlightModel.new()
+		d.set_armor("mk3")
+		d.position = Vector3(0, 3000, 0)
+		for i in 1800:
+			var fwd := -mv.y
+			d.step(STEP, { thrust = maxf(fwd, 0.0), retro = maxf(-fwd, 0.0),
+				lateral = mv.x, vertical = 0.0, walk = Vector2.ZERO, look = Vector2.ZERO,
+				roll = 0.0, boost = false, aiming = false, firing = false })
+		worst_sink = maxf(worst_sink, -d.velocity.y)
+		slowest = minf(slowest, d.speed)
+		fastest = maxf(fastest, d.speed)
+	_ok(worst_sink < 12.0, "no stick direction sinks the suit (worst %.0f m/s)" % worst_sink)
+	# Nose-first is meant to be the fastest — it is a body flying through air — but a
+	# THREE-fold gap between best and worst is a cliff rather than a polar curve.
+	_ok(slowest > fastest * 0.35,
+		"and none is hopeless (%.0f m/s of %.0f)" % [slowest, fastest])
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	quit(1 if bad > 0 else 0)

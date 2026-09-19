@@ -74,19 +74,19 @@ static func _build() -> void:
 	if not _all.is_empty():
 		return
 	_add({ id = "mk1", name = "MARK I", mass = 340.0,
-		main = 9800.0, lateral = 4410.0, vertical = 7350.0,
+		main = 9800.0, lateral = 6370.0, vertical = 7350.0,
 		top_speed = 150.0, drag = Vector3(3.2, 4.2, 6.5),
 		max_rate = 1.9, roll_rate = 2.4, alpha_max = 8.0, roll_alpha_max = 12.0,
 		rate_falloff_ref = 90.0, stability = 0.55, integrity = 900.0, power = 0.8,
 		boost = 1.15 })
 	_add({ id = "mk2", name = "MARK II", mass = 215.0,
-		main = 12600.0, lateral = 5670.0, vertical = 9450.0,
+		main = 12600.0, lateral = 8190.0, vertical = 9450.0,
 		top_speed = 300.0, drag = Vector3(4.0, 5.6, 8.0),
 		max_rate = 3.0, roll_rate = 4.2, alpha_max = 14.0, roll_alpha_max = 24.0,
 		rate_falloff_ref = 200.0, stability = 1.0, integrity = 1100.0, power = 1.0,
 		boost = 1.4, flaw = "icing" })
 	_add({ id = "mk3", name = "MARK III", mass = 220.0,
-		main = 13400.0, lateral = 6030.0, vertical = 10050.0,
+		main = 13400.0, lateral = 8710.0, vertical = 10050.0,
 		top_speed = 320.0, drag = Vector3(4.0, 5.6, 8.0),
 		max_rate = 3.1, roll_rate = 4.4, alpha_max = 14.0, roll_alpha_max = 25.0,
 		rate_falloff_ref = 210.0, stability = 1.05, integrity = 1600.0, power = 1.0,

@@ -63,6 +63,23 @@ func _process(_d: float) -> void:
 	var img := get_viewport().get_texture().get_image()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT))
 	img.save_png(OUT + "/hover_%s.png" % ("all" if OS.get_cmdline_user_args().is_empty() else OS.get_cmdline_user_args()[0]))
+	# A NUMBER for how bright the suit actually is, sampled off the middle of the frame
+	# where the body sits. Eyeballing "still too dark" through five renders is how two
+	# changes got made at once and both got blamed on the wrong one.
+	var lum := 0.0
+	var n := 0
+	var c0 := img.get_size() / 2
+	for y in range(c0.y - 170, c0.y + 40, 3):
+		for x in range(c0.x - 70, c0.x + 70, 3):
+			var px := img.get_pixel(x, y)
+			var l := 0.2126 * px.r + 0.7152 * px.g + 0.0722 * px.b
+			# ONLY THE DARK PIXELS. Averaging the whole box measured mostly SKY, so the
+			# number sat at 0.28 whatever the lighting did and told me nothing. The suit is
+			# the dark thing in front of a bright background, so that is what to sample.
+			if l < 0.55:
+				lum += l
+				n += 1
+	print("[shot] suit luminance = %.3f over %d samples" % [lum / maxf(1, n), n])
 	print("[shot] saved — thrust_mag=%.2f hover=%s y=%.0f" % [
 		_pilot.model.thrust_mag, _pilot.model.hover_active, _pilot.model.position.y])
 	var fx: Thrusters = _pilot.fx

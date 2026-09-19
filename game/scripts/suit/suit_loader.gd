@@ -59,6 +59,10 @@ static func load_suit(path: String) -> Node3D:
 		_cache[path] = null
 		return null
 
+	# Done once, here, before the scene is packed — so every spawn gets it for free and no
+	# caller has to remember.
+	_polish(node)
+
 	# Pack it once so later instances are cheap: parsing three megabytes of glTF on every
 	# spawn would be felt the moment a second player joins.
 	var packed := PackedScene.new()
@@ -78,3 +82,35 @@ static func _pack_owner(node: Node, root: Node) -> void:
 	for c in node.get_children():
 		c.owner = root
 		_pack_owner(c, root)
+
+## POLISH THE ARMOUR.
+##
+## Measured off the shipped models, every plate came in at roughness 1.00 with metallic up
+## to 0.90 — and a fully rough metal is the darkest thing you can put in a scene. Metal has
+## almost no diffuse response, so nearly everything you see on it is reflected environment;
+## at roughness 1 that reflection is smeared into a uniform dim grey, and with only a sky to
+## reflect it goes nearly black. That is why the suit stayed "zbyt ciemny" through two
+## rounds of turning the LIGHTS up: the lights were never the problem, the surface was.
+##
+## Polishing it is also just correct. Tony's armour is a mirror.
+const MAX_ROUGHNESS := 0.34
+const MIN_SPECULAR := 0.55
+##
+## NOT by lifting albedo. That was tried at 1.75 and at 1.18 and both rendered the armour
+## as a featureless white blob, which is not a tuning miss — for a METAL, albedo_color is
+## the specular reflectance, so pushing it past one makes the surface reflect more light
+## than reaches it. With a bright sky, a near-mirror roughness and a glow pass on top, it
+## runs away immediately. Brightness has to come from the lighting and the roughness.
+
+static func _polish(n: Node) -> void:
+	if n is MeshInstance3D:
+		var mesh: Mesh = (n as MeshInstance3D).mesh
+		if mesh != null:
+			for i in mesh.get_surface_count():
+				var m = mesh.surface_get_material(i)
+				if m is StandardMaterial3D:
+					var sm: StandardMaterial3D = m
+					sm.roughness = minf(sm.roughness, MAX_ROUGHNESS)
+					sm.metallic_specular = maxf(sm.metallic_specular, MIN_SPECULAR)
+	for c in n.get_children():
+		_polish(c)
