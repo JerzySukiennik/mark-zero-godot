@@ -45,15 +45,21 @@ func _initialize() -> void:
 
 	_shots = [
 		{ file = "hud.png", setup = func(): _hud.visible = true; _menu.visible = false },
+		{ file = "menu_hero.png", setup = func():
+			_hud.visible = false
+			_menu.visible = true; _menu.tab = 0; _menu.row = 1
+			_menu.active_hero = "ironman"
+			_menu.taken_heroes = { "spiderman": "NAREK" }
+			_menu.queue_redraw() },
 		{ file = "menu_bay.png", setup = func():
 			_hud.visible = false
-			_menu.visible = true; _menu.tab = 0; _menu.row = 2; _menu.queue_redraw() },
+			_menu.visible = true; _menu.tab = 1; _menu.row = 2; _menu.queue_redraw() },
 		{ file = "menu_bay_locked.png", setup = func():
 			_hud.visible = false
-			_menu.visible = true; _menu.tab = 0; _menu.row = 4; _menu.queue_redraw() },
+			_menu.visible = true; _menu.tab = 1; _menu.row = 4; _menu.queue_redraw() },
 		{ file = "menu_controls.png", setup = func():
 			_hud.visible = false
-			_menu.visible = true; _menu.tab = 3; _menu.queue_redraw() },
+			_menu.visible = true; _menu.tab = 4; _menu.queue_redraw() },
 	]
 
 func _process(_d: float) -> bool:

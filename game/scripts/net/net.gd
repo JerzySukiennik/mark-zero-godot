@@ -25,7 +25,15 @@ signal peers_changed
 const DEFAULT_PORT := 27015
 const MAX_PLAYERS := 8
 
-var players: Dictionary = {}          ## peer id -> { name, armor }
+var players: Dictionary = {}          ## peer id -> { name, armor, hero }
+
+## IRON MAN OR SPIDER-MAN, and in a room the two are EXCLUSIVE.
+##
+## Jurek: solo you pick one of them; in multiplayer one player is Iron Man and the other is
+## Spider-Man. So this is not a cosmetic choice like the armour — it decides which entity
+## the arena spawns, and two people cannot hold the same one.
+const HEROES := ["ironman", "spiderman"]
+var local_hero := "ironman"
 var local_name := "PILOT"
 var local_armor := "mk1"
 var is_host := false
@@ -34,7 +42,7 @@ func _ready() -> void:
 	# A solo run is a room with one peer in it. Seeding the roster here means the arena
 	# spawns a suit whether or not anyone ever opens a room, and there is no "offline" code
 	# path to keep in step with the online one.
-	players[1] = { name = local_name, armor = local_armor }
+	players[1] = { name = local_name, armor = local_armor, hero = local_hero }
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected)
@@ -51,7 +59,7 @@ func host(port: int = DEFAULT_PORT) -> bool:
 		return false
 	multiplayer.multiplayer_peer = peer
 	is_host = true
-	players[multiplayer.get_unique_id()] = { name = local_name, armor = local_armor }
+	players[multiplayer.get_unique_id()] = { name = local_name, armor = local_armor, hero = local_hero }
 	peers_changed.emit()
 	room_opened.emit(port)
 	return true
@@ -87,15 +95,15 @@ func _on_peer_connected(id: int) -> void:
 	if is_host:
 		# Tell the newcomer about everyone already here, then everyone about the newcomer.
 		for pid in players:
-			_register.rpc_id(id, pid, players[pid].name, players[pid].armor)
-	_register.rpc_id(id, my_id, local_name, local_armor)
+			_register.rpc_id(id, pid, players[pid].name, players[pid].armor, players[pid].get("hero", "ironman"))
+	_register.rpc_id(id, my_id, local_name, local_armor, local_hero)
 
 func _on_peer_disconnected(id: int) -> void:
 	players.erase(id)
 	peers_changed.emit()
 
 func _on_connected() -> void:
-	players[my_id] = { name = local_name, armor = local_armor }
+	players[my_id] = { name = local_name, armor = local_armor, hero = local_hero }
 	peers_changed.emit()
 	room_joined.emit()
 
@@ -110,9 +118,40 @@ func _on_server_gone() -> void:
 	room_failed.emit("The host left")
 
 @rpc("any_peer", "call_remote", "reliable")
-func _register(id: int, who: String, armor: String) -> void:
-	players[id] = { name = who, armor = armor }
+func _register(id: int, who: String, armor: String, hero: String) -> void:
+	players[id] = { name = who, armor = armor, hero = hero }
+	# TWO HEROES, ONE EACH. If the newcomer wants the role we are already playing, they get
+	# the other one — settled locally and identically on every peer, so nobody has to ask
+	# the host and there is no window where the room holds two Iron Men.
+	if id != my_id and hero == players.get(my_id, {}).get("hero", ""):
+		players[id].hero = other_hero(hero)
 	peers_changed.emit()
+
+static func other_hero(hero: String) -> String:
+	return "spiderman" if hero == "ironman" else "ironman"
+
+## Switch sides. In a room this also pushes whoever held it onto the other role, because
+## the pair is exclusive and somebody has to move.
+@rpc("any_peer", "call_local", "reliable")
+func set_hero(id: int, hero: String) -> void:
+	if not players.has(id):
+		return
+	for pid in players:
+		if pid != id and players[pid].get("hero", "") == hero:
+			players[pid].hero = other_hero(hero)
+	players[id].hero = hero
+	if id == my_id:
+		local_hero = hero
+	peers_changed.emit()
+
+func announce_hero(hero: String) -> void:
+	if online:
+		set_hero.rpc(my_id, hero)
+	else:
+		local_hero = hero
+		if players.has(my_id):
+			players[my_id].hero = hero
+		peers_changed.emit()
 
 ## Tell everyone which armour you are wearing now. Called when a suit is put on.
 @rpc("any_peer", "call_local", "reliable")

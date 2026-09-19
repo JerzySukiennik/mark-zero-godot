@@ -84,17 +84,36 @@ func _sky() -> void:
 func _sync_suits() -> void:
 	# Anyone in the roster who has no suit yet gets one; anyone who left loses theirs.
 	for id in Net.players:
+		var hero: String = Net.players[id].get("hero", "ironman")
+		# A player who switched sides needs a different BODY, not a different costume, so
+		# the old entity is thrown away and the loop below builds the right one.
+		if suits.has(id) and _hero_of(suits[id]) != hero:
+			suits[id].queue_free()
+			suits.erase(id)
 		if not suits.has(id):
-			var s := SuitPilot.new()
-			s.name = "Suit_%d" % id
-			s.setup(id, Net.players[id].get("armor", "mk1"), stage)
-			# Spread the spawns down the avenue so nobody starts inside anybody.
+			# Spread the spawns so nobody starts inside anybody.
 			var i := suits.size()
-			# On the plate, not two hundred metres up: the suit is the thing being looked at.
-			s.position = Vector3(i * 4.0, Stage.GROUND_Y + 1.0, 0)
-			add_child(s)
-			s.model.position = s.position
-			suits[id] = s
+			# On the plate, not two hundred metres up: the character is the thing being
+			# looked at.
+			var at := Vector3(i * 4.0, Stage.GROUND_Y + 1.0, 0)
+			var n: Node3D
+			if hero == "spiderman":
+				var sp := SpiderPilot.new()
+				sp.name = "Spider_%d" % id
+				sp.setup(id, stage)
+				sp.position = at
+				add_child(sp)
+				sp.model.position = at
+				n = sp
+			else:
+				var s := SuitPilot.new()
+				s.name = "Suit_%d" % id
+				s.setup(id, Net.players[id].get("armor", "mk1"), stage)
+				s.position = at
+				add_child(s)
+				s.model.position = at
+				n = s
+			suits[id] = n
 	for id in suits.keys():
 		if not Net.players.has(id):
 			suits[id].queue_free()
@@ -108,4 +127,10 @@ func _physics_process(delta: float) -> void:
 		return
 	_publish_acc = 0.0
 	for id in suits:
-		suits[id].publish()
+		# Only the armour syncs for now; Spider-Man's remote representation comes with the
+		# Iron Spider model, and publishing a body nobody can see yet buys nothing.
+		if suits[id] is SuitPilot:
+			suits[id].publish()
+
+static func _hero_of(n: Node) -> String:
+	return "spiderman" if n is SpiderPilot else "ironman"

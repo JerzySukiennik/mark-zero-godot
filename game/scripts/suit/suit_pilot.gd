@@ -100,7 +100,13 @@ func _ready() -> void:
 		visor.name = "Visor"
 		add_child(visor)
 		visor.ready.connect(func():
-			visor.menu.armor_chosen.connect(func(id: String): wear(id)))
+			visor.menu.armor_chosen.connect(func(id: String): wear(id))
+			# Switching hero replaces the whole entity, so it goes through Net and the
+			# arena rebuilds — this node is about to be freed and must not try to react.
+			visor.menu.hero_chosen.connect(func(id: String): Net.announce_hero(id))
+			# The roster panel is fed rather than reaching for Net itself, so refresh it
+			# whenever it comes up.
+			visor.menu.opened.connect(func(): _feed_roster()))
 
 func _load_rig(id: String) -> void:
 	if rig != null:
@@ -325,7 +331,6 @@ func _turret(delta: float) -> void:
 	if held and turret.ready_to_fire():
 		var muzzle := global_position
 		var kick := turret.fire(Repulsors.aim_point(camera, muzzle))
-		_recoil[hand] = 1.0
 		if kick != Vector3.ZERO:
 			model.velocity += kick
 			if visor != null and visor.hud != null:
@@ -389,3 +394,15 @@ func _sync(p: Vector3, q: Quaternion, th: float) -> void:
 	_net_pos = p
 	_net_basis = Basis(q)
 	_net_thrust = th
+
+## Hands the menu the room's state. Kept on this side of the line so SuitMenu stays
+## renderable without a running SceneTree.
+func _feed_roster() -> void:
+	if visor == null or visor.menu == null:
+		return
+	visor.menu.active_hero = Net.local_hero
+	var taken: Dictionary = {}
+	for pid in Net.players:
+		if pid != Net.my_id:
+			taken[Net.players[pid].get("hero", "ironman")] = Net.players[pid].get("name", "PILOT")
+	visor.menu.taken_heroes = taken

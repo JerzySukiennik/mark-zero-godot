@@ -19,6 +19,7 @@ extends Control
 signal opened
 signal closed
 signal armor_chosen(id: String)
+signal hero_chosen(id: String)
 signal purchase_attempted(id: String, price: int)
 
 const CYAN := Color(0.55, 0.88, 1.0)
@@ -26,7 +27,14 @@ const AMBER := Color(1.0, 0.72, 0.28)
 const DIM := Color(0.45, 0.58, 0.68)
 const LOCKED := Color(0.38, 0.42, 0.48)
 
-const TABS := ["ARMOUR BAY", "LOADOUT", "FLIGHT", "CONTROLS"]
+## HERO comes FIRST, because it is the only choice here that changes what you are rather
+## than what you are wearing — and in a room it is the one that has to be agreed.
+const TABS := ["HERO", "ARMOUR BAY", "LOADOUT", "FLIGHT", "CONTROLS"]
+
+const ROSTER := [
+	{ id = "ironman",   name = "IRON MAN",    sub = "FLIES. SHOOTS. STOPS ITSELF." },
+	{ id = "spiderman", name = "SPIDER-MAN",  sub = "WEBS ONTO ANYTHING THAT FLIES." },
+]
 
 ## Price in credits. The Mark I is free because it is the one he built in a cave.
 const CATALOGUE := [
@@ -42,6 +50,12 @@ var row := 0
 var owned := { "mk1": true }
 var credits := 0
 var equipped := "mk1"
+## Who the player is, and who else in the room is already somebody. FED IN, never read off
+## the Net autoload: autoloads do not exist under `godot --script`, so a panel that reaches
+## for one cannot be rendered by the screenshot tool or asserted by a test. Exactly the
+## lesson SuitSpecs and PadInput.glyph each had to learn before it.
+var active_hero := "ironman"
+var taken_heroes: Dictionary = {}      ## hero id -> the name of the player holding it
 var _msg := ""
 var _msg_t := 0.0
 var _nav_cool := 0.0
@@ -109,10 +123,18 @@ func step(delta: float) -> void:
 	queue_redraw()
 
 func _rows() -> int:
-	return CATALOGUE.size() if tab == 0 else 0
+	match tab:
+		0: return ROSTER.size()
+		1: return CATALOGUE.size()
+	return 0
 
 func _accept() -> void:
-	if tab != 0:
+	if tab == 0:
+		var who: Dictionary = ROSTER[row]
+		hero_chosen.emit(who.id)
+		_say("%s SELECTED" % who.name)
+		return
+	if tab != 1:
 		return
 	var item: Dictionary = CATALOGUE[row]
 	if owned.get(item.id, false):
@@ -172,10 +194,11 @@ func _draw() -> void:
 
 	var top := m.y + 76.0 * u
 	match tab:
-		0: _draw_bay(Vector2(m.x, top), w, s.y - top - m.y * 1.6, u)
-		1: _draw_stub(Vector2(m.x, top), "LOADOUT", "Shoulder turret and wrist laser go here.", u)
-		2: _draw_stub(Vector2(m.x, top), "FLIGHT", "Trim, assists and camera preferences.", u)
-		3: _draw_controls(Vector2(m.x, top), w, u)
+		0: _draw_roster(Vector2(m.x, top), w, u)
+		1: _draw_bay(Vector2(m.x, top), w, s.y - top - m.y * 1.6, u)
+		2: _draw_stub(Vector2(m.x, top), "LOADOUT", "Shoulder turret and wrist laser go here.", u)
+		3: _draw_stub(Vector2(m.x, top), "FLIGHT", "Trim, assists and camera preferences.", u)
+		4: _draw_controls(Vector2(m.x, top), w, u)
 
 	# ---- footer ---------------------------------------------------------------------
 	var fy := s.y - m.y * 0.45
@@ -185,6 +208,30 @@ func _draw() -> void:
 	if _msg_t > 0.0:
 		var a: float = clampf(_msg_t, 0.0, 1.0)
 		_text(Vector2(m.x, fy - 30 * u), _msg, Color(AMBER.r, AMBER.g, AMBER.b, a), int(16 * u))
+
+## Two big cards, because there are two of them and this is the first thing the player
+## does. A scrolling list of two items would be a list for the sake of being one.
+func _draw_roster(at: Vector2, w: float, u: float) -> void:
+	var ch := 168.0 * u
+	var gap := 18.0 * u
+	for i in ROSTER.size():
+		var who: Dictionary = ROSTER[i]
+		var y := at.y + i * (ch + gap)
+		var sel := i == row
+		var mine: bool = who.id == active_hero
+		var r := Rect2(Vector2(at.x, y), Vector2(w, ch))
+		draw_rect(r, Color(0.05, 0.11, 0.16, 0.85 if sel else 0.5), true)
+		draw_rect(r, (CYAN if sel else DIM) * Color(1, 1, 1, 0.9 if sel else 0.4), false,
+			maxf(1.0, (2.0 if sel else 1.0) * u))
+		_text(Vector2(at.x + 26 * u, y + 62 * u), who.name, CYAN if sel else DIM, int(38 * u))
+		_text(Vector2(at.x + 26 * u, y + 100 * u), who.sub, DIM, int(15 * u))
+		if mine:
+			_text(Vector2(at.x + w - 120 * u, y + 62 * u), "ACTIVE", AMBER, int(18 * u))
+		# Who else in the room is already this hero. In a solo run the dictionary is empty
+		# and the line simply does not appear, rather than saying so.
+		if taken_heroes.has(who.id):
+			_text(Vector2(at.x + 26 * u, y + 138 * u),
+				"TAKEN BY %s" % taken_heroes[who.id], AMBER, int(14 * u))
 
 func _draw_bay(at: Vector2, w: float, h: float, u: float) -> void:
 	var rh := 70.0 * u
