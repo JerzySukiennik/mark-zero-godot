@@ -97,6 +97,12 @@ func _ready() -> void:
 			sp.model.position = Vector3(0, 120, -40)
 			sp.model.velocity = Vector3(0, 0, -30)
 			sp.model.grounded = false
+			# The ROPE on its own. He is aimed straight at the tower here, and now that the
+			# buildings actually collide he sticks to it a metre in — which is correct, and
+			# is what the wall section below measures. Isolating the pendulum from the
+			# collision keeps each test about one thing.
+			sp.model.space = null
+			sp.model.stuck = false
 			var t: WebTether = sp.tether["R"]
 			# Anchored high on the near face, which is what a ray from the player would hit.
 			_ok(t.fire(sp.model.position, tower, Vector3(0, 150, -78)), "a web reaches it")
@@ -147,6 +153,61 @@ func _ready() -> void:
 			_ok(at_deep > at_high * 1.25,
 				"and height turns into SPEED down the arc (%.0f m/s at the bottom, %.0f at the top)"
 				% [at_deep, at_high])
+
+	print("=== the wall ===")
+	if now is SpiderPilot:
+		var sp2: SpiderPilot = now
+		sp2.model.space = sp2.get_world_3d().direct_space_state
+		_ok(sp2.model.space != null, "he can see the physics world at all")
+
+		# Flown at the near face of the first tower, which stands at z = -95 and is 34 m
+		# across, so its face is at z = -78.
+		sp2.model.stuck = false
+		sp2.model.grounded = false
+		sp2.model.position = Vector3(0, 100, -60)
+		sp2.model.velocity = Vector3(0, 0, -60)
+		for i in 60:
+			sp2.model.step(1.0 / 120.0, { walk = Vector2.ZERO, look = Vector2.ZERO,
+				jump = false, aiming = false, release = false, wall_run = false }, Vector3.ZERO)
+			if sp2.model.stuck:
+				break
+		# The buildings had collision bodies that nothing ever queried, so he flew straight
+		# through them: "zrob, zeby te budynki mialy kolizje przede wszystkim".
+		_ok(sp2.model.stuck, "flying into a tower sticks him to it")
+		_ok(absf(sp2.model.wall_normal.y) < 0.4,
+			"on a vertical face (normal.y %.2f)" % sp2.model.wall_normal.y)
+
+		if sp2.model.stuck:
+			# AND HE DOES NOT FALL. That is the whole request — a wall is a floor.
+			var y0: float = sp2.model.position.y
+			for i in 180:
+				sp2.model.step(1.0 / 120.0, { walk = Vector2.ZERO, look = Vector2.ZERO,
+					jump = false, aiming = false, release = false, wall_run = false }, Vector3.ZERO)
+			_ok(absf(sp2.model.position.y - y0) < 0.2,
+				"and he holds there instead of sliding down (%.2f m)" % (sp2.model.position.y - y0))
+
+			# The stick climbs the face.
+			for i in 240:
+				sp2.model.step(1.0 / 120.0, { walk = Vector2(0, -1), look = Vector2.ZERO,
+					jump = false, aiming = false, release = false, wall_run = false }, Vector3.ZERO)
+			_ok(sp2.model.position.y > y0 + 4.0,
+				"pushing up crawls him up the wall (%.1f m)" % (sp2.model.position.y - y0))
+			var crawl_to: float = sp2.model.position.y
+
+			# And the trigger makes it a run rather than a crawl.
+			for i in 240:
+				sp2.model.step(1.0 / 120.0, { walk = Vector2(0, -1), look = Vector2.ZERO,
+					jump = false, aiming = false, release = false, wall_run = true }, Vector3.ZERO)
+			_ok(sp2.model.position.y - crawl_to > (crawl_to - y0) * 1.5,
+				"and holding the trigger RUNS it (%.1f m against %.1f)" % [
+					sp2.model.position.y - crawl_to, crawl_to - y0])
+
+			# X pushes him off, backwards and up.
+			sp2.model.step(1.0 / 120.0, { walk = Vector2.ZERO, look = Vector2.ZERO,
+				jump = false, aiming = false, release = true, wall_run = false }, Vector3.ZERO)
+			_ok(not sp2.model.stuck, "X lets go of the wall")
+			_ok(sp2.model.velocity.y > 2.0 and sp2.model.velocity.length() > 6.0,
+				"with a push out and up (%.0f m/s)" % sp2.model.velocity.length())
 
 	print("=== and back again, also through the menu ===")
 	var m2: SuitMenu = now.visor.menu

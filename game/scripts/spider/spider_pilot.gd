@@ -179,8 +179,19 @@ func _physics_process(delta: float) -> void:
 			_throw[hand] = 1.0
 			Rumble.hit(0.35, 0.2, 0.08)
 
+	# NO WEBS ON A WALL. Jurek: "jak jest na tej scianie, to nie powinny sie wlaczac sieci,
+	# czyli R2 i L2 nie powinny byc wlaczone w ogole" — and L2 has a different job there
+	# anyway, which is to make him run. Any line still out is dropped the moment he lands
+	# on a face, because hanging off a web while clinging to a wall is neither.
 	var rope := Vector3.ZERO
+	if model.stuck:
+		for hand: String in ["R", "L"]:
+			_held[hand] = false
+			if tether[hand].state != WebTether.IDLE:
+				tether[hand].release()
 	for hand: String in ["R", "L"]:
+		if model.stuck:
+			break
 		_service_web(hand, delta)
 		var t: WebTether = tether[hand]
 		# WebTether's constants are already per-kilogram, so this is an acceleration and
@@ -209,14 +220,14 @@ func _physics_process(delta: float) -> void:
 	# and refill on the ground or on a fresh web, so the loop is web-swing-hop rather than
 	# free flight, which is Iron Man's job.
 	var hopped := false
-	if not model.grounded and Pad.just_pressed("up") and _hops > 0:
+	if not model.grounded and not model.stuck and Pad.just_pressed("up") and _hops > 0:
 		_hops -= 1
 		hopped = true
 		var fwd := model.basis_ * Vector3(0, 0, -1)
 		model.velocity.y = maxf(model.velocity.y, 0.0) + HOP_UP
 		model.velocity += fwd * HOP_FWD
 		Rumble.landing(0.3)
-	if model.grounded:
+	if model.grounded or model.stuck:
 		_hops = MAX_HOPS
 
 	var cmd := {
@@ -224,9 +235,16 @@ func _physics_process(delta: float) -> void:
 		look = look,
 		jump = model.grounded and Pad.just_pressed("up"),
 		aiming = aiming,
+		# On a wall X pushes OFF it rather than jumping, and the left trigger sprints up
+		# the face instead of throwing a web.
+		release = model.stuck and Pad.just_pressed("up"),
+		wall_run = Pad.retro() > TRIGGER_FIRE,
 	}
 	if _stage != null:
 		model.ground_y = _stage.ground_y
+	# Handed in every frame so the model can do its own sweeps. It is a RefCounted and has
+	# no tree of its own.
+	model.space = get_world_3d().direct_space_state
 	var was_down := not model.grounded
 	var fell := model.velocity.y
 	model.step(delta, cmd, rope)

@@ -83,6 +83,20 @@ static var POSES := {
 		"piv_kneeR": { "dir": _d(0, -0.78, 0.63) },
 		"piv_chest": { "dir": _d(0, 0.97, -0.24) },
 	},
+	# SPREAD FLAT AGAINST IT. Limbs wide and bent, belly to the surface, head turned up and
+	# out — the silhouette that says "this is a floor to him" rather than "he is hanging on".
+	"cling": {
+		"piv_shoulderL": { "dir": _d(0.82, 0.40, -0.41), "twist": -30.0 },
+		"piv_shoulderR": { "dir": _d(-0.82, 0.40, -0.41), "twist": 30.0 },
+		"piv_elbowL": { "dir": _d(0.24, -0.52, -0.82) },
+		"piv_elbowR": { "dir": _d(-0.24, -0.52, -0.82) },
+		"piv_hipL": { "dir": _d(0.68, -0.60, -0.42) },
+		"piv_hipR": { "dir": _d(-0.68, -0.60, -0.42) },
+		"piv_kneeL": { "dir": _d(0.10, -0.50, -0.86) },
+		"piv_kneeR": { "dir": _d(-0.10, -0.50, -0.86) },
+		"piv_chest": { "dir": _d(0, 0.92, -0.39) },
+		"piv_neck": { "dir": _d(0, 0.72, -0.69) },
+	},
 	# THE THREE-POINT LANDING. Deep crouch, one hand down, the other trailed behind.
 	"land": {
 		"piv_shoulderL": { "dir": _d(0.34, -0.86, -0.38), "twist": -16.0 },
@@ -98,11 +112,11 @@ static var POSES := {
 	},
 }
 
-const NAMES := ["idle", "run", "swing", "fall", "land"]
+const NAMES := ["idle", "run", "swing", "fall", "land", "cling"]
 ## Entering a landing is instant; leaving one is slow, because picking yourself up takes
 ## longer than hitting the ground.
-const ENTER := { "idle": 7.0, "run": 11.0, "swing": 9.0, "fall": 6.0, "land": 26.0 }
-const LEAVE := { "idle": 6.0, "run": 8.0, "swing": 6.0, "fall": 5.0, "land": 3.0 }
+const ENTER := { "idle": 7.0, "run": 11.0, "swing": 9.0, "fall": 6.0, "land": 26.0, "cling": 14.0 }
+const LEAVE := { "idle": 6.0, "run": 8.0, "swing": 6.0, "fall": 5.0, "land": 3.0, "cling": 9.0 }
 
 var blend: Dictionary = {}
 var current := "idle"
@@ -139,7 +153,9 @@ func _choose(delta: float, model: SpiderModel, hands: Dictionary) -> void:
 	var hanging: bool = hands.get("R", false) or hands.get("L", false)
 
 	var name := "idle"
-	if _land_timer > 0.0 and model.grounded:
+	if model.stuck:
+		name = "cling"
+	elif _land_timer > 0.0 and model.grounded:
 		name = "land"
 	elif model.grounded:
 		name = "run" if model.ground_speed > 0.5 else "idle"
@@ -161,7 +177,7 @@ func _drive(delta: float, model: SpiderModel, hands: Dictionary, rig: SuitRig) -
 	_bob += delta
 
 	# ---- the run cycle -----------------------------------------------------------------
-	var running: float = blend["run"]
+	var running: float = blend["run"] + blend["cling"] * clampf(model.ground_speed / 3.0, 0.0, 1.0) * 0.55
 	if running > 0.001:
 		var ph: float = model.stride_phase * TAU
 		var gait := clampf(model.ground_speed / SpiderModel.RUN_SPEED, 0.0, 1.0)
@@ -203,10 +219,36 @@ func _drive(delta: float, model: SpiderModel, hands: Dictionary, rig: SuitRig) -
 				rig.aim_joint("piv_shoulder" + side, _d(out, 0.95, -0.22))
 				rig.aim_joint("piv_elbow" + side, _d(0, 0.99, -0.14))
 		# The body swings with its own momentum: lateral speed rakes it sideways.
-		var lat: float = clampf((model.basis_.inverse() * model.velocity).x / 24.0, -1.0, 1.0)
+		var bv := model.basis_.inverse() * model.velocity
+		var lat: float = clampf(bv.x / 24.0, -1.0, 1.0)
 		rig.add_offset("piv_hips", Z_AX, -lat * 0.30 * swinging)
 		rig.add_offset("piv_chest", Z_AX, -lat * 0.22 * swinging)
 		rig.add_offset("piv_neck", Z_AX, lat * 0.16 * swinging)
+
+		# AND IT HAS TO LOOK LIKE SOMETHING IS HAPPENING. Jurek: "jak zaczyna leciec na tej
+		# sieci, nie ma zadnych animacji". A held pose is a held pose however good it is, so
+		# the arc drives the body directly — none of this is on a timer.
+		var fast := clampf(model.speed / 45.0, 0.0, 1.0) * swinging
+		# Legs stream out behind with speed and tuck as he slows.
+		rig.add_offset("piv_hipL", X_AX, 0.55 * fast)
+		rig.add_offset("piv_hipR", X_AX, 0.40 * fast)
+		rig.add_offset("piv_kneeL", X_AX, 0.95 * fast)
+		rig.add_offset("piv_kneeR", X_AX, 0.70 * fast)
+		# THROUGH THE BOTTOM OF THE ARC HE CURLS. Rising, he opens out. That is the
+		# difference between riding a swing and being a weight on a string, and the cue is
+		# free: it is just the sign of the vertical speed.
+		var dive: float = clampf(-model.velocity.y / 28.0, -1.0, 1.0) * swinging
+		rig.add_offset("piv_chest", X_AX, dive * 0.30)
+		rig.add_offset("piv_hips", X_AX, dive * 0.18)
+		rig.add_offset("piv_neck", X_AX, -dive * 0.34)
+		# The free arm trails and counterbalances rather than hanging dead.
+		for hand: String in ["R", "L"]:
+			if hands.get(hand, false):
+				continue
+			var free: String = SuitRig.SIDE[hand]
+			rig.add_offset("piv_shoulder" + free, X_AX, 0.45 * fast)
+			rig.add_offset("piv_shoulder" + free, Z_AX, -lat * 0.35 * swinging)
+			rig.add_offset("piv_elbow" + free, X_AX, -0.30 - 0.35 * fast)
 
 	# ---- falling ------------------------------------------------------------------------
 	var falling: float = blend["fall"]

@@ -44,11 +44,38 @@ var ground_speed := 0.0
 var stride_phase := 0.0
 var swinging := false
 
+## ---- on a wall ---------------------------------------------------------------------
+## Spider-Man's whole point is that a wall is a floor. Until now the only surface in the
+## model was a ground PLANE at y = 0 — buildings had collision bodies that nothing ever
+## asked about, so he flew straight through them.
+var stuck := false
+var wall_normal := Vector3.UP
+## Set by the pilot each frame. The model does its own sweeps rather than handing the job
+## up, because sticking has to happen in the same step as the movement that caused it —
+## a frame spent airborne inside a wall is a frame the camera sees.
+var space: PhysicsDirectSpaceState3D = null
+
+## How fast he crawls, and how fast he runs when the trigger is held.
+const CRAWL_SPEED := 4.2
+const WALL_RUN_SPEED := 11.5
+const CRAWL_ACCEL := 40.0
+## Clearance kept off the surface so the next sweep does not start inside it.
+const SKIN := 0.12
+## The push-off when he lets go backwards.
+const FLIP_OUT := 9.0
+const FLIP_UP := 6.5
+
 var speed: float:
 	get: return velocity.length()
 
 ## `rope` is the acceleration the tethers are applying this step, already summed.
 func step(delta: float, cmd: Dictionary, rope: Vector3) -> void:
+	if stuck:
+		_crawl(delta, cmd)
+		basis_ = Basis.from_euler(Vector3(0, yaw, 0), EULER_ORDER_YXZ)
+		view_basis = Basis.from_euler(Vector3(pitch, yaw, 0), EULER_ORDER_YXZ)
+		return
+
 	var look: Vector2 = cmd.get("look", Vector2.ZERO)
 	yaw -= look.x
 	pitch = clampf(pitch - look.y, -1.2, 1.2)
@@ -73,8 +100,10 @@ func step(delta: float, cmd: Dictionary, rope: Vector3) -> void:
 
 	accel = a
 	velocity += a * delta
+	var from := position
 	position += velocity * delta
 
+	_hit_wall(from)
 	_resolve_ground()
 	_walk(delta, cmd)
 
@@ -124,3 +153,76 @@ func _walk(delta: float, cmd: Dictionary) -> void:
 	ground_speed = v.length()
 	# Distance, not time — the same rule the armour's walk follows, for the same reason.
 	stride_phase += ground_speed * delta / stride_len(ground_speed, RUN_SPEED)
+
+## Did this step drive him into something? Sticks him to it if so.
+##
+## A ray rather than a shape sweep: he is a point mass everywhere else in this file, and a
+## capsule here would disagree with the ground handling by exactly its own radius.
+func _hit_wall(from: Vector3) -> void:
+	if space == null or stuck:
+		return
+	var q := PhysicsRayQueryParameters3D.create(from, position)
+	q.collide_with_areas = false
+	var hit := space.intersect_ray(q)
+	if hit.is_empty():
+		return
+	var n: Vector3 = hit.get("normal", Vector3.UP)
+	# A near-flat surface is the FLOOR, and the floor is handled by _resolve_ground — going
+	# down that path here would leave him "stuck" to the plate and unable to walk.
+	if n.dot(Vector3.UP) > 0.7:
+		return
+	stuck = true
+	wall_normal = n.normalized()
+	position = (hit["position"] as Vector3) + wall_normal * SKIN
+	velocity = Vector3.ZERO
+	ground_speed = 0.0
+
+## Crawling, running and letting go. While he is on a wall there is no gravity and no
+## tether — it is a different mode, not flight with a different pose.
+func _crawl(delta: float, cmd: Dictionary) -> void:
+	if cmd.get("release", false):
+		# BACKFLIP OFF. Out along the normal and up, so he arcs away from the face rather
+		# than sliding down it — and being airborne again is what re-enables the webs.
+		stuck = false
+		velocity = wall_normal * FLIP_OUT + Vector3.UP * FLIP_UP
+		return
+
+	# A frame ON the wall: "up" is world up flattened into the surface, so crawling a
+	# vertical face feels like climbing and crawling a ceiling still has a consistent
+	# forward. Facing the wall, his right is up-cross-normal.
+	var up := (Vector3.UP - wall_normal * Vector3.UP.dot(wall_normal))
+	if up.length_squared() < 1e-4:
+		up = (basis_ * Vector3(0, 0, -1)) - wall_normal * (basis_ * Vector3(0, 0, -1)).dot(wall_normal)
+	up = up.normalized()
+	var right := up.cross(wall_normal).normalized()
+
+	var ask: Vector2 = cmd.get("walk", Vector2.ZERO)
+	var mag := clampf(ask.length(), 0.0, 1.0)
+	# HOLDING THE TRIGGER RUNS. Jurek: on a wall L2 must not throw a web, it must make him
+	# stand up and sprint up the face. So the same finger means two different things in two
+	# different modes, which is fine because the modes are unmistakable.
+	var top: float = WALL_RUN_SPEED if cmd.get("wall_run", false) else CRAWL_SPEED
+	var want := (right * ask.x - up * ask.y) * (top * mag)
+
+	velocity = velocity.move_toward(want, CRAWL_ACCEL * delta)
+	position += velocity * delta
+	ground_speed = velocity.length()
+	stride_phase += ground_speed * delta / stride_len(ground_speed, WALL_RUN_SPEED)
+
+	# Stay ON it. A short probe into the face each step follows curves and, when it finds
+	# nothing, means he has crawled off an edge — at which point he simply falls.
+	if space == null:
+		return
+	var probe := PhysicsRayQueryParameters3D.create(
+		position + wall_normal * 0.4, position - wall_normal * 0.8)
+	probe.collide_with_areas = false
+	var hit := space.intersect_ray(probe)
+	if hit.is_empty():
+		stuck = false
+		return
+	var n: Vector3 = (hit.get("normal", wall_normal) as Vector3).normalized()
+	if n.dot(Vector3.UP) > 0.7:
+		stuck = false          # crawled onto a roof; let the ground handling take him
+		return
+	wall_normal = n
+	position = (hit["position"] as Vector3) + wall_normal * SKIN

@@ -13,14 +13,17 @@ extends MeshInstance3D
 ## weight or whether you are falling.
 
 ## Filaments wound around the core.
-const STRANDS := 3
+## More of them, and thinner. At three fat filaments it read as a braided CABLE — Jurek:
+## "teraz sa linki zwykle, a ja chcialem prawdziwe sieci". Silk is many fine threads that
+## catch the light together, so the count goes up and the radius comes down hard.
+const STRANDS := 6
 ## Points along the path. Enough for the sag to read as a curve rather than as a crease.
 const SEGMENTS := 26
 ## Helix turns over the full span.
-const TWIST := 5.0
+const TWIST := 9.0
 ## Radius of the braid, in metres, at full width.
-const BRAID := 0.045
-const CORE := 0.022
+const BRAID := 0.026
+const CORE := 0.007
 
 var _mesh: ImmediateMesh
 var _mat: StandardMaterial3D
@@ -80,8 +83,11 @@ func draw_web(from: Vector3, to: Vector3, slack: float, reach: float, cam: Vecto
 	_ribbon(path, dir, side, up, 0.0, 0.0, CORE, Color(1.0, 1.0, 1.0, 0.85), cam, reach)
 	for s in STRANDS:
 		var phase := TAU * float(s) / STRANDS
-		_ribbon(path, dir, side, up, phase, BRAID, CORE * 0.62,
-			Color(0.88, 0.94, 1.0, 0.65), cam, reach)
+		# Each filament at a slightly different radius, so the bundle does not read as one
+		# tube with grooves cut in it. Alternating in and out is what makes it look spun.
+		var r: float = BRAID * (0.62 + 0.38 * float(s % 3))
+		_ribbon(path, dir, side, up, phase, r, CORE * 0.55,
+			Color(0.90, 0.95, 1.0, 0.40), cam, reach)
 
 ## One camera-facing ribbon, optionally wound helically at `offset` metres from the centre.
 func _ribbon(path: PackedVector3Array, dir: Vector3, side: Vector3, up: Vector3,

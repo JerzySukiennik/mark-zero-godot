@@ -32,6 +32,13 @@ var _next_splat := 0
 var _cool := { "L": 0.0, "R": 0.0 }
 var _built := false
 
+func _ready() -> void:
+	# The pool was never built: `build` existed, nothing called it, `_take` therefore always
+	# returned null and `fire` always returned false. From the pad that is a button that
+	# does nothing at all — "one teraz w ogole nie strzelaja". Every other effect here keeps
+	# both, because add_child does not run _ready under `godot --script`.
+	build()
+
 func build() -> void:
 	if _built:
 		return
