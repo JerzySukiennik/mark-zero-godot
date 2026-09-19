@@ -237,6 +237,14 @@ func _draw_roster(at: Vector2, w: float, u: float) -> void:
 				"TAKEN BY %s" % taken_heroes[who.id], AMBER, int(14 * u))
 
 func _draw_bay(at: Vector2, w: float, h: float, u: float) -> void:
+	# Spider-Man has no armour bay. Saying so beats listing five suits he cannot wear and
+	# leaving him to work out why picking one does nothing — which is exactly how it read.
+	if active_hero != "ironman":
+		_text(at + Vector2(0, 40 * u), "THE ARMOUR BAY IS TONY'S.", DIM, int(26 * u))
+		_text(at + Vector2(0, 76 * u), "Switch back to IRON MAN on the HERO tab to wear one.",
+			DIM, int(15 * u))
+		return
+
 	var rh := 70.0 * u
 	var gap := 9.0 * u
 	var list_w := w * 0.55

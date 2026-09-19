@@ -137,3 +137,4 @@ func _physics_process(delta: float) -> void:
 
 static func _hero_of(n: Node) -> String:
 	return "spiderman" if n is SpiderPilot else "ironman"
+

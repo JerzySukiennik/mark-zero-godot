@@ -415,3 +415,15 @@ func _feed_roster() -> void:
 		if pid != Net.my_id:
 			taken[Net.players[pid].get("hero", "ironman")] = Net.players[pid].get("name", "PILOT")
 	visor.menu.taken_heroes = taken
+
+## THE WORLD-PARENTED PIECES GO WITH IT.
+##
+## The camera, the bolts and the contrail deliberately live in the arena rather than on the
+## suit, because each of them would be wrong if it inherited the body's tumbling. That also
+## means freeing the suit leaves all three behind — and switching hero frees the suit. A
+## couple of changes of mind and the arena holds three chase cameras, of which the one still
+## marked current belongs to an armour that no longer exists.
+func _exit_tree() -> void:
+	for n: Node in [camera, guns, trail]:
+		if n != null and is_instance_valid(n):
+			n.queue_free()

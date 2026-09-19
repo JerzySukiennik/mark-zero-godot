@@ -183,7 +183,7 @@ func _targets() -> Array:
 	return out
 
 func _hand_point(hand: String) -> Vector3:
-	var name := "piv_palm" + SuitRig.SIDE[hand]
+	var name: String = "piv_palm" + SuitRig.SIDE[hand]
 	if skel != null and skel.has_pivot(name):
 		return (skel.pivots[name] as Node3D).global_position
 	return model.position
@@ -277,3 +277,11 @@ func _feed_roster() -> void:
 		if pid != Net.my_id:
 			taken[Net.players[pid].get("hero", "ironman")] = Net.players[pid].get("name", "PILOT")
 	visor.menu.taken_heroes = taken
+
+## Same rule as SuitPilot: the strands and the camera are parented to the world so they do
+## not swing with the body, so they have to be cleaned up by hand when he is replaced.
+func _exit_tree() -> void:
+	var doomed: Array = [camera, line["R"], line["L"]]
+	for n: Node in doomed:
+		if n != null and is_instance_valid(n):
+			n.queue_free()
