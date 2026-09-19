@@ -23,7 +23,11 @@ const FLY_SPEED := 340.0
 ## Rope spring, per kilogram, and its damping. Stiff enough not to feel elastic, damped
 ## enough not to oscillate — a bouncy rope is the other classic failure here.
 const STIFFNESS := 46.0
-const DAMPING := 7.0
+## LIGHT. At 7.0 the rope ate the swing's energy as fast as gravity put it in, so every arc
+## came out at the same speed as the one before and the whole thing felt flat — Jurek: "nie
+## ma tego momentum, w sensie ze leci sie z ta sama predkoscia". A swing is a pendulum, and
+## a pendulum that is damped does not swing, it settles. Just enough to kill the twang.
+const DAMPING := 2.2
 ## How fast the player can haul themselves in or pay line out, in metres per second.
 const REEL_SPEED := 14.0
 const MIN_LENGTH := 3.0

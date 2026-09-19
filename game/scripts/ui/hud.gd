@@ -32,6 +32,12 @@ const VISOR_CUT := 0.034
 var health := 1.0
 var repulsor_l := 1.0
 var repulsor_r := 1.0
+## Whole shots left in each hand, and whether that hand is locked out reloading.
+var shots_l := 16
+var shots_r := 16
+var shots_max := 16
+var locked_l := false
+var locked_r := false
 var turret := 1.0
 var _turret_show := 0.0           ## seconds left on the turret bar
 var _sway := Vector2.ZERO
@@ -94,9 +100,11 @@ func _draw() -> void:
 	_label(o + Vector2(rx + 16 * u, 54 * u), ammo_label, Color(0.6, 0.72, 0.8), int(12 * u))
 	# One bar per hand, because they are fired by different buttons and drain separately.
 	_label(o + Vector2(rx + 16 * u, 76 * u), ammo_rows[0], CYAN, int(13 * u))
-	_bar(Rect2(o + Vector2(rx + 34 * u, 66 * u), Vector2(248 * u, 11 * u)), repulsor_l, CYAN)
+	_pips(Rect2(o + Vector2(rx + 34 * u, 66 * u), Vector2(248 * u, 11 * u)),
+		shots_l, shots_max, CYAN, locked_l)
 	_label(o + Vector2(rx + 16 * u, 98 * u), ammo_rows[1], CYAN, int(13 * u))
-	_bar(Rect2(o + Vector2(rx + 34 * u, 88 * u), Vector2(248 * u, 11 * u)), repulsor_r, CYAN)
+	_pips(Rect2(o + Vector2(rx + 34 * u, 88 * u), Vector2(248 * u, 11 * u)),
+		shots_r, shots_max, CYAN, locked_r)
 	if _turret_show > 0.0:
 		# The turret bar is not always on screen: a readout that is always there is
 		# furniture, one that appears when it matters is information.
@@ -129,6 +137,22 @@ func _draw() -> void:
 func _panel(r: Rect2) -> void:
 	draw_rect(r, Color(0.02, 0.05, 0.08, 0.42), true)
 	draw_rect(r, Color(CYAN.r, CYAN.g, CYAN.b, 0.28), false, 1.0)
+
+## A magazine, drawn as PIPS. A smooth bar cannot show you that you have three shots left,
+## only that you have "some" — and with sixteen discrete shots the count is the whole point.
+func _pips(r: Rect2, left: int, total: int, col: Color, locked_out: bool) -> void:
+	draw_rect(r, Color(0.1, 0.16, 0.2, 0.7), true)
+	var gap := maxf(1.0, r.size.x * 0.004)
+	var w := (r.size.x - gap * (total - 1)) / total
+	for i in total:
+		var x := r.position.x + i * (w + gap)
+		var on := i < left
+		var c := col if on else Color(col.r, col.g, col.b, 0.12)
+		if locked_out:
+			# Red the WHOLE strip while it is reloading, not just the empty part: the
+			# message is "you cannot shoot", and a half-cyan bar says the opposite.
+			c = Color(1.0, 0.30, 0.26, 0.85 if on else 0.16)
+		draw_rect(Rect2(Vector2(x, r.position.y), Vector2(w, r.size.y)), c, true)
 
 func _bar(r: Rect2, v: float, col: Color) -> void:
 	draw_rect(r, Color(0.1, 0.16, 0.2, 0.7), true)

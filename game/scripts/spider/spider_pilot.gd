@@ -37,8 +37,11 @@ const SWING_FAN := 5
 const SWING_SPREAD := deg_to_rad(26.0)
 ## The pull into the arc when a web lands: it shortens and hauls, rather than going taut
 ## and leaving you hanging.
-const CATCH_SHORTEN := 0.88
-const CATCH_LIFT := 6.0
+## A NUDGE, not a yank. At 0.88 and 6 m/s the catch threw him upwards every single time —
+## "nie powinno to tak jakby skakac za kazdym razem". Enough to turn a fall into an arc and
+## no more; the arc itself is supposed to do the rest of the work.
+const CATCH_SHORTEN := 0.975
+const CATCH_LIFT := 2.2
 const FEET_DROP := 1.0
 const AIM_TIME_SCALE := 0.35
 
@@ -51,6 +54,9 @@ var visor: Visor
 var health := 1.0
 var legs := SpiderLegs.new()
 var poses := SpiderPoses.new()
+var shots: WebShot
+## Counts down while the back legs are braced for a landing.
+var _brace := 0.0
 
 ## One per hand. Right is R1, left is L1 — the same hands the armour fires from, so the
 ## two characters do not need separate muscle memory.
@@ -86,6 +92,11 @@ func _ready() -> void:
 		# by every swing, which is the one thing a rope must never do.
 		get_parent().call_deferred("add_child", w)
 		line[hand] = w
+	shots = WebShot.new()
+	shots.name = "WebShots"
+	# In the WORLD: a glob in flight and a splat on a wall both stay where they are while
+	# he swings away, which is the entire point of throwing one.
+	get_parent().call_deferred("add_child", shots)
 	if is_mine:
 		camera = ChaseCamera.new()
 		camera.name = "ChaseCamera"
@@ -142,6 +153,21 @@ func _physics_process(delta: float) -> void:
 	# Reeling is on the d-pad rather than the stick, because the stick is already steering
 	# the swing and hauling yourself in is something you do DURING one.
 	var reel := (1.0 if Pad.pressed("up") else 0.0) - (1.0 if Pad.pressed("down") else 0.0)
+
+	# R1 AND L1 THROW A WEB. Separate from the triggers, which hold on to one: "R1... reka
+	# powinna tak strzelic... i to powinno z nadgarstka mu leciec takie i na scianie
+	# zostawiac". Bumpers throw, triggers hold — and keeping the two apart is what lets
+	# each mean one thing.
+	for hand: String in ["R", "L"]:
+		if not Pad.just_pressed("fire_" + hand.to_lower()):
+			continue
+		if shots == null or not shots.ready_to_fire(hand):
+			continue
+		var wrist := _web_point(hand)
+		var aim := -camera.global_transform.basis.z if camera != null else model.basis_ * Vector3(0, 0, -1)
+		if shots.fire(hand, wrist, aim):
+			_throw[hand] = 1.0
+			Rumble.hit(0.35, 0.2, 0.08)
 
 	var rope := Vector3.ZERO
 	for hand: String in ["R", "L"]:
@@ -203,11 +229,17 @@ func _physics_process(delta: float) -> void:
 		_pose(delta)
 		# The legs come out whenever he is off the ground — they are what he lands and
 		# catches himself on, so they belong to being airborne rather than to a button.
-		legs.drive(delta, not model.grounded, skel)
+		if _brace > 0.0:
+			_brace -= delta
+		legs.drive(delta, (not model.grounded) or _brace > 0.0, skel)
 		skel.update_pose(delta)
 
 	if was_down and model.grounded:
 		poses.land_hard(clampf(-fell / 30.0, 0.0, 1.0))
+		# THE LEGS CATCH HIM. Jurek: coming down off a swing "one powinny sie tak otwierac
+		# i tak hamowac go od tylu". They are already out in the air; holding them out
+		# through the landing is what turns a fold-away into a brace.
+		_brace = 0.55 + clampf(-fell / 40.0, 0.0, 1.0) * 0.45
 
 	_draw_webs()
 
@@ -335,6 +367,15 @@ func _targets() -> Array:
 		if c is SuitPilot:
 			out.append(c)
 	return out
+
+## The web shooter itself, on the underside of the wrist. The Iron Spider model carries a
+## `piv_websL/R` for exactly this; the palm is where a repulsor would go.
+func _web_point(hand: String) -> Vector3:
+	var side: String = SuitRig.SIDE[hand]
+	var n := "piv_webs" + side
+	if skel != null and skel.has_pivot(n):
+		return (skel.pivots[n] as Node3D).global_position
+	return _hand_point(hand)
 
 func _hand_point(hand: String) -> Vector3:
 	var name: String = "piv_palm" + SuitRig.SIDE[hand]

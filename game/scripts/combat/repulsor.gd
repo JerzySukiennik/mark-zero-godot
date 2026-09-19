@@ -24,8 +24,18 @@ const LIFE := 2.4
 const POOL := 24
 const COOLDOWN := 0.14          ## per hand, so alternating hands doubles the rate
 const RECOIL := 2.4             ## m/s of push-back per shot
-const DRAIN := 0.055            ## fraction of that hand's charge per shot
-const RECHARGE := 0.22          ## fraction per second
+## SIXTEEN SHOTS A HAND, counted rather than measured.
+##
+## Jurek's rule: tap it sixteen times and the bar goes red and STAYS locked until it has
+## refilled all the way; stop short of empty and you can keep going whenever you like, with
+## the magazine topping itself up a shot at a time. That makes the last few shots a real
+## decision — spend them and you are unarmed for a while — which a smooth bar that always
+## lets you squeeze out one more never did.
+const SHOTS := 16
+const DRAIN := 1.0 / SHOTS
+## Seconds to put one shot back.
+const RELOAD_PER_SHOT := 1.5
+const RECHARGE := 1.0 / (SHOTS * RELOAD_PER_SHOT)
 
 signal fired(hand: String)
 
@@ -40,6 +50,14 @@ class Bolt:
 var _pool: Array = []
 var _cool := { "L": 0.0, "R": 0.0 }
 var charge := { "L": 1.0, "R": 1.0 }
+## A hand that has been run dry refuses to fire until it is back at FULL, not until it has
+## scraped together one shot's worth. Without it the empty bar just becomes a very slow
+## trickle of single shots, which is not a reload, it is a stutter.
+var locked := { "L": false, "R": false }
+
+## Whole shots left in that hand, for the HUD to draw as pips.
+func shots_left(hand: String) -> int:
+	return int(round(charge.get(hand, 0.0) * SHOTS))
 
 func _ready() -> void:
 	build()
@@ -120,7 +138,8 @@ static func aim_point(cam: Camera3D, fallback: Vector3, max_dist := 900.0) -> Ve
 	return hit.get("position", origin + dir * max_dist)
 
 func ready_to_fire(hand: String) -> bool:
-	return _cool.get(hand, 0.0) <= 0.0 and charge.get(hand, 0.0) >= DRAIN
+	return _cool.get(hand, 0.0) <= 0.0 and not locked.get(hand, false) \
+		and charge.get(hand, 0.0) >= DRAIN - 0.0001
 
 ## Fire one hand. Returns the recoil to apply to the airframe, or ZERO if it did not fire.
 func fire(hand: String, muzzle: Vector3, target: Vector3) -> Vector3:
@@ -131,6 +150,8 @@ func fire(hand: String, muzzle: Vector3, target: Vector3) -> Vector3:
 		return Vector3.ZERO
 	_cool[hand] = COOLDOWN
 	charge[hand] = maxf(0.0, charge[hand] - DRAIN)
+	if charge[hand] <= 0.0001:
+		locked[hand] = true
 
 	var dir := target - muzzle
 	if dir.length_squared() < 1e-6:
@@ -162,6 +183,8 @@ func _physics_process(delta: float) -> void:
 	for k in _cool:
 		_cool[k] = maxf(0.0, _cool[k] - delta)
 		charge[k] = minf(1.0, charge[k] + RECHARGE * delta)
+		if locked[k] and charge[k] >= 0.9999:
+			locked[k] = false
 
 	for b: Bolt in _pool:
 		if not b.live:

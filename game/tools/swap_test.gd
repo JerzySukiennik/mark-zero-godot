@@ -121,6 +121,33 @@ func _ready() -> void:
 			_ok(sp.model.position.distance_to(t.anchor_point()) < t.rest_length * 1.3,
 				"staying on the end of the line")
 
+			# MOMENTUM. A swing is a pendulum: it trades height for speed on the way down.
+			# At a damping of 7.0 the rope was eating that energy as fast as gravity put it
+			# in, so every arc came out at the entry speed and the whole thing felt flat —
+			# "leci sie z ta sama predkoscia". This measures the trade actually happening.
+			# Measured as the pendulum property itself rather than against a number picked
+			# in advance: the SAME swing must be faster at the bottom of the arc than at the
+			# top. Comparing against a fixed entry speed only measured how long the test had
+			# been running before it started looking.
+			var high := -1e9
+			var deep := 1e9
+			var at_high := 0.0
+			var at_deep := 0.0
+			for i in 360:
+				var rope2 := t.step(1.0 / 120.0, sp.model.position, sp.model.velocity, 0.0)
+				sp.model.step(1.0 / 120.0, { walk = Vector2.ZERO, look = Vector2.ZERO,
+					jump = false, aiming = false }, rope2)
+				if sp.model.position.y > high:
+					high = sp.model.position.y
+					at_high = sp.model.speed
+				if sp.model.position.y < deep:
+					deep = sp.model.position.y
+					at_deep = sp.model.speed
+			_ok(high - deep > 8.0, "it is a real arc, not a hang (%.0f m of swing)" % (high - deep))
+			_ok(at_deep > at_high * 1.25,
+				"and height turns into SPEED down the arc (%.0f m/s at the bottom, %.0f at the top)"
+				% [at_deep, at_high])
+
 	print("=== and back again, also through the menu ===")
 	var m2: SuitMenu = now.visor.menu
 	m2.open()

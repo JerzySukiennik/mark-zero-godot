@@ -1,7 +1,7 @@
 # ironspider.glb — notes for the game programmer
 
-Peter Parker's Iron Spider: red-and-gold nanotech armour, four stowed spider legs, web
-shooters. Built procedurally by `models/ironspider-build.py` (Blender 4.5, headless), to
+Peter Parker's Iron Spider: **deep-crimson and navy-black** nanotech armour with narrow
+gold trim, four stowed spider legs, web shooters. Built procedurally by `models/ironspider-build.py` (Blender 4.5, headless), to
 the same contract as the Mark suits plus the additions below.
 
 ```
@@ -24,12 +24,43 @@ in `/tmp`.
 | Up / facing | +Y up, **−Z forward**, **+X is the character's LEFT** |
 | glTF extensions | `KHR_materials_emissive_strength`, `KHR_materials_specular` — **no** `extensionsRequired`, no meshopt, no quantization, so `GLTFDocument.append_from_buffer` reads it |
 | Armature | none |
-| Materials | `mat_primary` (deep red, metallic 0.92 / rough 0.24), `mat_secondary` (gold, 1.0 / 0.20), `mat_trim` (bright silver, 1.0 / 0.16), `mat_dark` (nanite under-layer, 0.45 / 0.52), `mat_glow` (emission strength 4.5) |
+| Materials | `mat_primary` (deep crimson, metallic 0.80 / rough 0.26), `mat_secondary` (champagne gold, 1.0 / 0.24), `mat_trim` (bright silver, 1.0 / 0.16), `mat_dark` (navy-black armour panel, 0.62 / 0.30), `mat_glow` (cyan, emission strength 3.2) |
 
-Gold covers the chest, collars, pauldrons, forearms, elbows, knees, shins, belts and the
-mask's brows; deep red covers the mask, back, ribs, abdomen, pelvis, biceps, gauntlets,
-hands, thighs and boots; `mat_dark` is the inner surface of every plate, which is what
-you see in the gaps and what makes the suit read as nanotech rather than as a costume.
+## Palette — and why it is not red-and-gold
+
+The **comics** Iron Spider is red-and-gold. The **film** suit (Infinity War, Endgame, and
+unchanged in No Way Home) is not: it is a deep crimson body carrying large near-black
+**navy** armour panels, with gold only as narrow trim. Sampled straight off reference
+frames — a daylight full-body plate and a lit turntable of the torso:
+
+| | sampled on film | authored albedo (linear) | authored albedo (sRGB) |
+|---|---|---|---|
+| `mat_primary` crimson | `#7c2e2e` … `#692934` | `(0.165, 0.0062, 0.0125)` | ≈ `#6E1119` |
+| `mat_dark` navy-black | `#0c171d` … `#12202b` | `(0.0165, 0.0215, 0.0380)` | ≈ `#222837` |
+| `mat_secondary` gold | `#bfb29a` (lit bracer) | `(0.400, 0.302, 0.158)` | ≈ `#AC9877` |
+| `mat_glow` lens | cyan-white | emit `(0.12, 0.62, 1.0)` × 3.2 | — |
+
+The dark panels are **blue-biased, never neutral black** (B > G > R in every sample); that
+is what makes them read as navy in daylight and as black in shadow, which is exactly how
+the suit behaves on screen. The authored values sit a touch below the screen values on
+purpose: `SuitLoader` clamps roughness to 0.34 and floors `metallic_specular`, so the game
+lifts them again. Do not pre-brighten.
+
+**Where each colour sits**
+
+- **Crimson** (`mat_primary`): mask/helmet, chest, abdomen, gauntlets, palms, fingers, boots.
+- **Navy-black** (`mat_dark`): pauldrons, collars, biceps, back, ribs, pelvis, thighs, shins,
+  ears, the helmet crest, the brow flicks, the chest emblem — *and* the inner surface of
+  every plate, which is what you see in the gaps and what makes the suit read as nanotech
+  rather than as a costume. This is now the largest area on the model, by design.
+- **Gold** (`mat_secondary`): forearm bracers (the web shooters — the one large gold mass
+  on the film suit), elbows, knees, belts, and the four spider legs. Nothing else.
+- **Silver** (`mat_trim`): the web-shooter housings on the gauntlets.
+- **Cyan** (`mat_glow`): eye lenses, emblem core, palm and boot emitters, web-shooter ports.
+
+*Previously: gold covered the chest, collars, pauldrons, forearms, elbows, knees, shins,
+belts and the mask's brows, and red covered everything else — the comics scheme. Corrected
+2026-09-19 against film reference.*
 
 ## It is a shell, not a statue
 
@@ -90,10 +121,10 @@ earL earR helmet faceplate
 
 Plus, beyond the 37: `legA1 legA2 legA3 … legD3` (12) and `fingersL fingersR` (2).
 
-- **`reactor`** is not an arc reactor. It is the gold-suit's spider emblem — a body, eight
-  swept legs and a glowing core — laid on the chest surface in deep red so it reads
-  against the gold chestplate, with a `mat_glow` core at `piv_reactor`.
-- **`faceplate`** carries the eyes: a black rim, a large lit lens and a hotter core, each
+- **`reactor`** is not an arc reactor. It is the suit's spider emblem — a body, eight
+  swept legs and a glowing core — laid on the chest surface in navy-black so it reads
+  against the crimson chestplate, with a `mat_glow` core at `piv_reactor`.
+- **`faceplate`** carries the eyes: a black rim, a large cyan-lit lens and a hotter core, each
   projected onto the mask surface. The lenses deliberately stop short of the mask's
   silhouette; pushed out to the edge the relief vanishes into the curvature and the mask
   tears through them.
@@ -250,3 +281,8 @@ rim light, and `cull_disabled` so a thin tube seen edge-on does not flicker.
   was shortened for the finger pivot, between the fingers. Each was fixed in geometry.
 - **Rendered and looked at**: `ironspider-front/side/hero.png` at 1200×1200, plus a
   deployed-legs and folded-hand pose test driven through the numbers in this file.
+- **The 2026-09-19 palette change touched nothing but materials.** `tools/probe_rig.gd`
+  was run against the old `.glb` and the new one and its output is byte-identical
+  (same md5): 37 pivots, same world positions, same emitter axes. Mesh and node counts
+  are unchanged (51 / 88), `extensionsRequired` is still absent and accessors are still
+  plain float/ushort — no meshopt, no quantization.

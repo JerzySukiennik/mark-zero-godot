@@ -273,6 +273,7 @@ func _step_local(delta: float) -> void:
 	if skel != null:
 		poses.update(delta, model, cmd, skel)
 		_drive_shot_arms(delta)
+		_drive_laser_arm()
 		skel.update_pose(delta)
 
 	if fx != null:
@@ -303,8 +304,34 @@ func _step_local(delta: float) -> void:
 		if guns != null:
 			visor.hud.repulsor_l = guns.charge["L"]
 			visor.hud.repulsor_r = guns.charge["R"]
+			visor.hud.shots_max = Repulsors.SHOTS
+			visor.hud.shots_l = guns.shots_left("L")
+			visor.hud.shots_r = guns.shots_left("R")
+			visor.hud.locked_l = guns.locked["L"]
+			visor.hud.locked_r = guns.locked["R"]
 		if turret != null:
 			visor.hud.turret = turret.charge
+
+## The laser's own posing: the firing arm straight out in front, and on the ground the
+## torso twisted over legs that do not move.
+func _drive_laser_arm() -> void:
+	if laser == null or not laser.active or skel == null:
+		return
+	var side: String = SuitRig.SIDE["R"]
+	# Pointed, not nudged: the beam leaves along the forearm, so the forearm has to be
+	# aimed rather than leaned. Level and straight ahead.
+	skel.aim_joint("piv_shoulder" + side, Vector3(0.10, -0.12, -0.99).normalized())
+	skel.aim_joint("piv_elbow" + side, Vector3(0.0, -0.06, -0.998).normalized())
+	# The other arm tucks in, out of the beam's way and out of the silhouette.
+	var off: String = SuitRig.SIDE["L"]
+	skel.add_offset("piv_shoulder" + off, Poses.Z_AX, 0.40)
+	skel.add_offset("piv_elbow" + off, Poses.X_AX, -0.9)
+
+	if not laser.in_air:
+		# Split between the hips and the chest, because a spine turns along its length —
+		# putting it all in one joint reads as the torso being unscrewed.
+		skel.add_offset("piv_hips", Poses.Y_AX, laser.twist * 0.35)
+		skel.add_offset("piv_chest", Poses.Y_AX, laser.twist * 0.65)
 
 ## Singles out the arm that just fired. Negative X on a shoulder is forward — the same
 ## convention the arm trail uses in Poses, where braking throws both arms out in front.
@@ -382,11 +409,17 @@ func _laser(delta: float) -> void:
 		return
 	var step := laser.turn_for(delta)
 	if laser.in_air:
-		# Airborne: roll about the direction of travel, so the beam sweeps a disc.
-		model.roll += step
-	else:
-		# Grounded: turn on the spot at chest height.
+		# YAW, NOT ROLL. Rolling about the direction of travel put the suit head-down and
+		# swept the beam through a vertical disc, which is neither what it looks like nor
+		# what it is for — Jurek: "on sie tak dziwnie obraca, ze jakby glowa w dol". A full
+		# fast spin about the vertical axis is the move: the beam sweeps a horizontal
+		# circle and cuts everything standing around him.
 		model.yaw += step
+	else:
+		# ON THE GROUND THE FEET STAY. A man cannot spin on the spot through 360 degrees
+		# without moving them, so the sweep is the SPINE twisting over planted legs, and it
+		# is capped where a spine stops rather than running all the way round.
+		laser.twist = clampf(laser.twist + step, -PI * 0.62, PI * 0.62)
 	laser.update(delta)
 
 func _step_remote(delta: float) -> void:

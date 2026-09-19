@@ -43,9 +43,14 @@ var charge := 1.0
 var active := false
 var in_air := false
 var t := 0.0
-var turn_done := 0.0          ## radians turned so far, so the suit can be driven from it
+var turn_done := 0.0
+## How far the upper body has twisted, for the grounded sweep. The legs stay planted —
+## "nogi zostaja w miejscu, a on po prostu sie obraca" — so this never reaches the flight
+## model; the pilot applies it to the spine.
+var twist := 0.0          ## radians turned so far, so the suit can be driven from it
 
 var _beam: MeshInstance3D
+var _elbow: Node3D
 var _glow: OmniLight3D
 var _origin: Node3D
 var _rig: SuitRig
@@ -68,8 +73,8 @@ func build() -> void:
 	cm.cap_top = false
 	cm.cap_bottom = false
 	_beam.mesh = cm
-	# Built along +Z so it can be pointed with look_at like everything else here.
-	_beam.rotation_degrees = Vector3(90, 0, 0)
+	# Left along its own +Y. `update` builds the basis by hand and points that axis down
+	# the beam, so a pre-rotation here would only be something else to overwrite.
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
@@ -94,6 +99,8 @@ func attach(rig: SuitRig) -> void:
 	_origin = null
 	# Same side correction as the turret: the right forearm as the PLAYER sees it.
 	var mount: String = "piv_palm" + SuitRig.SIDE["R"]
+	var arm: String = "piv_elbow" + SuitRig.SIDE["R"]
+	_elbow = rig.pivots[arm] if rig != null and rig.has_pivot(arm) else null
 	if rig != null and rig.has_pivot(mount):
 		_origin = rig.pivots[mount]
 
@@ -145,6 +152,7 @@ static func _eased(x: float) -> float:
 
 func _stop() -> void:
 	active = false
+	twist = 0.0
 	_beam.visible = false
 	_glow.light_energy = 0.0
 	finished.emit()
@@ -154,8 +162,16 @@ func update(_delta: float) -> void:
 	if not active or _origin == null or _beam == null:
 		return
 	var from := _origin.global_position
-	# Out of the wrist along the emitter axis, which the contract puts at the pivot's -Y.
+	# ALONG THE ARM, elbow to wrist. The contract's emitter axis is the pivot's -Y, which
+	# points out of the PALM — straight down while the arm hangs, and never where the arm
+	# is pointing. Jurek asked for it to leave the wrist "jakby prosto, jak przedluzenie
+	# reki", which is the forearm's own direction and nothing else. That is also why no
+	# beam was ever visible: it was being drawn into the ground under his own feet.
 	var dir := (_origin.global_basis * Vector3(0, -1, 0)).normalized()
+	if _elbow != null and _elbow.is_inside_tree():
+		var arm := from - _elbow.global_position
+		if arm.length_squared() > 1e-5:
+			dir = arm.normalized()
 	var to := from + dir * RANGE
 
 	var space := get_world_3d().direct_space_state
@@ -164,10 +180,25 @@ func update(_delta: float) -> void:
 	if hit.has("position"):
 		to = hit["position"]
 
-	var len := from.distance_to(to)
-	_beam.global_position = (from + to) * 0.5
-	_beam.look_at_from_position((from + to) * 0.5, to, Vector3.UP)
-	_beam.scale = Vector3(1, 1, maxf(0.05, len))
+	var len := maxf(0.05, from.distance_to(to))
+	# THE BASIS IS BUILT BY HAND, because look_at cannot be used here. A CylinderMesh runs
+	# along its own +Y, and the node carried a +90 degree pre-rotation about X to account
+	# for that — which look_at then overwrote completely, leaving the cylinder standing
+	# PERPENDICULAR to the beam it was supposed to be. Measured at a dot product of 0.000.
+	# Pointing +Y straight down `dir`, and folding the length into that same axis, removes
+	# both the pre-rotation and the scale-on-the-wrong-axis in one go.
+	var up := Vector3.UP if absf(dir.dot(Vector3.UP)) < 0.95 else Vector3.FORWARD
+	var xa := up.cross(dir).normalized()
+	var za := xa.cross(dir).normalized()
+	# Axes assigned one at a time, NOT through Basis(x, y, z). That constructor takes ROWS
+	# while `basis.y` reads back a COLUMN, so building it in one call and then asking for
+	# the y axis returns something perpendicular to what was put in — measured at a dot
+	# product of exactly 0.000 against the arm, which is the giveaway.
+	var b := Basis()
+	b.x = xa
+	b.y = dir * len
+	b.z = za
+	_beam.global_transform = Transform3D(b, (from + to) * 0.5)
 	# The beam flickers hard. A steady cylinder is a tube; a flickering one is energy.
 	var m: StandardMaterial3D = _beam.material_override
 	var f := 0.72 + 0.28 * sin(Time.get_ticks_msec() * 0.09)

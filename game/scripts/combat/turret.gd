@@ -179,7 +179,15 @@ func fire(target: Vector3) -> Vector3:
 	s.light.light_energy = 5.0
 	fired.emit()
 	Rumble.hit(0.55, 0.35, 0.12)
-	return -dir * 5.5
+	# RECOIL, and a small one. This was 5.5 m/s of velocity PER SHOT, applied straight to
+	# the flight model — so holding square emptied the magazine into the suit as thrust and
+	# fired it backwards for a second. Jurek: "po przycisnieciu kwadratu... ma taki burst,
+	# ze leci przez sekunde do tylu."
+	#
+	# A shoulder gun on a flying armour should be FELT and should not fly it. The kick is
+	# now about a tenth of what it was, and the suit's own stabiliser absorbs it, which is
+	# the point of having one.
+	return -dir * 0.55
 
 func _take() -> Dictionary:
 	for s: Dictionary in _pool:

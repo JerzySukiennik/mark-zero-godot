@@ -57,5 +57,46 @@ func _initialize() -> void:
 		g2._physics_process(STEP)
 	_ok(g2.charge["R"] > before, "charge recovers (%.2f -> %.2f in a second)" % [before, g2.charge["R"]])
 
+	print("=== the magazine ===")
+	# Jurek's rule, in numbers: sixteen taps empties it, an empty hand is LOCKED until it
+	# has refilled all the way, and stopping short lets you carry straight on.
+	var mag := Repulsors.new()
+	root.add_child(mag)
+	mag.build()
+
+	var fired := 0
+	for i in 40:
+		mag._cool["R"] = 0.0
+		if mag.ready_to_fire("R"):
+			mag.fire("R", Vector3.ZERO, Vector3(0, 0, -50))
+			fired += 1
+	_ok(fired == Repulsors.SHOTS, "a full hand gives exactly %d shots (%d)" % [Repulsors.SHOTS, fired])
+	_ok(mag.locked["R"], "and then locks out")
+	_ok(mag.shots_left("R") == 0, "with nothing left on the gauge")
+
+	# Half a reload is not enough — that is the whole point of the lockout.
+	var half := int(Repulsors.SHOTS * Repulsors.RELOAD_PER_SHOT * 0.5 / STEP)
+	for i in half:
+		mag._physics_process(STEP)
+	mag._cool["R"] = 0.0
+	_ok(not mag.ready_to_fire("R"), "half reloaded is still locked (%d shots showing)" % mag.shots_left("R"))
+	for i in half + 200:
+		mag._physics_process(STEP)
+	mag._cool["R"] = 0.0
+	_ok(mag.ready_to_fire("R") and not mag.locked["R"], "full again, and it fires")
+
+	# Stopping short of empty must NOT lock, and must top itself up a shot at a time.
+	for i in 4:
+		mag._cool["R"] = 0.0
+		mag.fire("R", Vector3.ZERO, Vector3(0, 0, -50))
+	_ok(not mag.locked["R"], "spending four shots does not lock anything")
+	_ok(mag.shots_left("R") == Repulsors.SHOTS - 4, "and the gauge counts down (%d)" % mag.shots_left("R"))
+	for i in int(Repulsors.RELOAD_PER_SHOT * 2.0 / STEP):
+		mag._physics_process(STEP)
+	_ok(mag.shots_left("R") == Repulsors.SHOTS - 2,
+		"two shots come back in two reload times (%d)" % mag.shots_left("R"))
+	mag._cool["R"] = 0.0
+	_ok(mag.ready_to_fire("R"), "and it stayed usable the whole time")
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	quit(1 if bad > 0 else 0)

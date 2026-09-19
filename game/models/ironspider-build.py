@@ -2,7 +2,8 @@
 
     /Applications/Blender.app/Contents/MacOS/Blender --background --python models/ironspider-build.py
 
-Red-and-gold nanotech armour, 1.72 m, built to the same contract as the Mark suits:
+Deep-crimson / navy-black nanotech armour with gold trim, 1.72 m, built to the same
+contract as the Mark suits:
 spec space (+Y up, faces -Z, +X is the character's LEFT), one Empty per joint, every
 plate a separate object with its origin at its own centre, no armature.
 
@@ -52,12 +53,23 @@ wipe()
 # --------------------------------------------------------------- materials
 # Metallic 0.9+ with roughness under 0.35 is what reads as metal under an environment
 # map; plastic is what a low metallic and a flat roughness give you.
-mat("mat_primary", (0.260, 0.016, 0.026), 0.24, metal=0.92, spec=0.6)    # deep red
-mat("mat_secondary", (0.660, 0.440, 0.105), 0.20, metal=1.0, spec=0.6)  # gold
-mat("mat_trim", (0.480, 0.500, 0.545), 0.16, metal=1.0, spec=0.6)       # bright silver
-mat("mat_dark", (0.016, 0.016, 0.020), 0.52, metal=0.45, spec=0.4)      # nanite under-layer
-mat("mat_glow", (0.90, 0.80, 0.52), 0.30, metal=0.0, spec=0.5,
-    emit=(1.0, 0.90, 0.62), emit_strength=4.5)                          # eyes, emitters
+# FILM PALETTE (Infinity War / Endgame), sampled off reference frames, not invented:
+# the suit is a DEEP CRIMSON body carrying large near-black NAVY armour panels, with
+# gold only as narrow trim. It is not the comics' red-and-gold. Sampled albedos from a
+# daylight frame: red #7c2e2e-#692934, dark panels #0c171d-#12202b (blue-biased, never
+# neutral black), bracer gold #bfb29a (pale champagne, low saturation), lenses cyan.
+# Authored a touch below the screen values on purpose: SuitLoader clamps roughness to
+# 0.34 and floors metallic_specular, so the game lifts these again.
+mat("mat_primary", (0.165, 0.0062, 0.0125), 0.26, metal=0.80, spec=0.6)  # deep crimson
+mat("mat_secondary", (0.400, 0.302, 0.158), 0.24, metal=1.0, spec=0.6)   # restrained champagne gold
+mat("mat_trim", (0.420, 0.440, 0.480), 0.16, metal=1.0, spec=0.6)        # bright silver
+mat("mat_dark", (0.0165, 0.0215, 0.0380), 0.30, metal=0.62, spec=0.55)   # navy-black armour panel
+# The lenses read cyan-white on film, not white. Emission is authored so the RED channel
+# stays well under 1.0 after the strength multiply (0.12 x 3.2 = 0.38): push it past one
+# and all three channels clip, the hue is gone and the lens tone-maps to flat paper white.
+# Measured: at emit R 0.30 the lens centre still sampled #ffffff in the preview render.
+mat("mat_glow", (0.14, 0.66, 0.95), 0.28, metal=0.0, spec=0.5,
+    emit=(0.12, 0.62, 1.0), emit_strength=3.2)                           # cyan lenses, emitters
 
 RED, GOLD, SILVER, DARK, GLOW = "mat_primary", "mat_secondary", "mat_trim", "mat_dark", "mat_glow"
 
@@ -106,26 +118,26 @@ TH = 0.018          # torso plate thickness
 FR0, FR1 = R(203), R(337)           # front sector
 BK0, BK1 = R(23), R(157)            # back sector
 
-# chest — gold, the broad pectoral shell
+# chest — deep crimson, the broad pectoral shell
 p = plate([(1.150, 0.133, 0.112, -0.008), (1.215, 0.143, 0.118, -0.010),
            (1.270, 0.150, 0.114, -0.006), (1.320, 0.166, 0.108, 0.000),
            (1.352, 0.142, 0.100, 0.004)],
           FR0, FR1, TH, nseg=30, nring=22, inner_mat=1, taper=(1.0, 0.72))
-P("chest", p, [GOLD, DARK])
+P("chest", p, [RED, DARK])
 
 # back — red, and the shelf the spider legs stow against
 p = plate([(1.060, 0.122, 0.104, -0.002), (1.180, 0.140, 0.116, -0.008),
            (1.270, 0.150, 0.114, -0.006), (1.325, 0.165, 0.107, 0.000),
            (1.358, 0.138, 0.097, 0.004)],
           BK0, BK1, TH, nseg=30, nring=22, inner_mat=1, taper=(1.0, 0.78))
-P("back", p, [RED, DARK])
+P("back", p, [DARK, DARK])
 
 # flank ribs — red, they close the gap between chest and back
 for side, a in (("L", 0.0), ("R", math.pi)):
     p = plate([(1.060, 0.124, 0.106, -0.002), (1.140, 0.133, 0.112, -0.008),
                (1.215, 0.143, 0.118, -0.010), (1.280, 0.149, 0.112, -0.005)],
               a - R(36), a + R(36), TH, nseg=20, nring=16, inner_mat=1)
-    P("rib" + side, p, [RED, DARK])
+    P("rib" + side, p, [DARK, DARK])
 
 # abdomen — red with three segment ribs, the flexible midriff
 p = plate([(0.996, 0.117, 0.099, 0.000), (1.060, 0.121, 0.103, -0.002),
@@ -152,7 +164,7 @@ groin = plate([(0.722, 0.078, 0.062, 0.000), (0.756, 0.096, 0.076, 0.002),
               R(206), R(334), 0.014, nseg=20, nring=12, inner_mat=1, taper=(0.68, 1.0))
 p.add(groin.v, groin.f, 0)
 p.m[-len(groin.f):] = groin.m
-P("pelvis", p, [RED, DARK])
+P("pelvis", p, [DARK, DARK])
 
 # hip belts — gold blocks over the iliac crest
 for side, sx in (("L", 1), ("R", -1)):
@@ -169,7 +181,7 @@ for side, sx in (("L", 1), ("R", -1)):
                (1.378, 0.108, 0.086, 0.004), (1.398, 0.080, 0.072, 0.004)],
               a - R(94), a + R(94), 0.015, nseg=24, nring=16, inner_mat=1,
               taper=(1.0, 0.94))
-    P("collar" + side, p, [GOLD, DARK])
+    P("collar" + side, p, [DARK, DARK])
 
 # ---------------------------------------------------------------- shoulders
 for side, sx in (("L", 1), ("R", -1)):
@@ -179,7 +191,7 @@ for side, sx in (("L", 1), ("R", -1)):
                (1.396, 0.134, 0.082, 0.004)],
               a - R(84), a + R(84), 0.016, nseg=24, nring=18, inner_mat=1,
               taper=(1.0, 0.70))
-    P("pauldron" + side, p, [GOLD, DARK])
+    P("pauldron" + side, p, [DARK, DARK])
 
 # ---------------------------------------------------------------- arms
 for side, sx in (("L", 1), ("R", -1)):
@@ -189,7 +201,7 @@ for side, sx in (("L", 1), ("R", -1)):
                (1.160, 0.060, 0.060, 0.004, sx * 0.139),
                (1.098, 0.056, 0.056, 0.004, sx * 0.143)],
               0, TAU, 0.014, nseg=20, nring=16, closed=True, inner_mat=1)
-    P("bicep" + side, p, [RED, DARK])
+    P("bicep" + side, p, [DARK, DARK])
 
     # elbow — gold cowl
     p = plate([(1.108, 0.058, 0.058, 0.004, sx * 0.143),
@@ -272,7 +284,7 @@ for side, sx in (("L", 1), ("R", -1)):
                (0.600, 0.080, 0.086, 0.000, sx * 0.069),
                (0.522, 0.072, 0.078, 0.002, sx * 0.068)],
               0, TAU, 0.016, nseg=24, nring=18, closed=True, inner_mat=1)
-    P("thigh" + side, p, [RED, DARK])
+    P("thigh" + side, p, [DARK, DARK])
 
     # knee — gold cap
     p = plate([(0.530, 0.073, 0.079, 0.002, sx * 0.068),
@@ -288,7 +300,7 @@ for side, sx in (("L", 1), ("R", -1)):
                (0.220, 0.056, 0.066, -0.002, sx * 0.067),
                (0.166, 0.053, 0.062, -0.004, sx * 0.067)],
               0, TAU, 0.015, nseg=24, nring=18, closed=True, inner_mat=1)
-    P("shin" + side, p, [GOLD, DARK])
+    P("shin" + side, p, [DARK, DARK])
 
     # boot — red shell around the foot, lofted over Z slices like a real last
     boot = [   # (z, rx, ry, cy) — cavity = (cy + 0.004, rx - 0.014, ry - 0.016)
@@ -383,15 +395,15 @@ neck.loft([ring_xz(0.0, 1.704, 0.006, 0.052, 0.058, 14, 2.2),
            ring_xz(0.0, 1.716, 0.006, 0.030, 0.034, 14, 2.2),
            ring_xz(0.0, 1.7198, 0.006, 0.004, 0.005, 14, 2.2)], mat=1)
 p.add(neck.v, neck.f, 1)
-P("helmet", p, [RED, DARK, GOLD])
+P("helmet", p, [RED, DARK, DARK])
 
-# ears — small gold audio pods
+# ears — small dark audio pods
 for side, sx in (("L", 1), ("R", -1)):
     p = Part()
     p.loft([ring_xz(sx * 0.112, 1.512, 0.012, 0.010, 0.026, 10, 2.4),
             ring_xz(sx * 0.122, 1.516, 0.012, 0.012, 0.030, 10, 2.4),
             ring_xz(sx * 0.128, 1.520, 0.012, 0.008, 0.022, 10, 2.4)])
-    P("ear" + side, p, [GOLD])
+    P("ear" + side, p, [DARK])
 
 # faceplate — the front of the mask, and THE EYES
 p = plate(MASK[:8], R(210), R(330), 0.014, nseg=34, nring=28, inner_mat=1,
@@ -467,8 +479,9 @@ for sx in (1, -1):
         tri = (base + i, base + j, ci)
         p.f.append(tri if sx > 0 else tri[::-1])
         p.m.append(3)
-# two short gold brow flicks — ABOVE the lenses and stopping well short of the centre,
-# so they read as brows and never as the bridge of a pair of glasses
+# two short dark brow flicks — ABOVE the lenses and stopping well short of the centre,
+# so they read as brows and never as the bridge of a pair of glasses. Black, not gold:
+# on the film suit the only thing framing the lenses is the black rim.
 for sx in (1, -1):
     rows = []
     for k in range(9):
@@ -479,11 +492,12 @@ for sx in (1, -1):
         rows.append([(x, y0 + w, mask_z(y0 + w, x, 0.0014)),
                      (x, y0 - w, mask_z(y0 - w, x, 0.0014))])
     p.grid([[r[0] for r in rows], [r[1] for r in rows]], mat=2, flip=(sx < 0))
-P("faceplate", p, [RED, DARK, GOLD, GLOW])
+P("faceplate", p, [RED, DARK, DARK, GLOW])
 
 # ---------------------------------------------------------------- chest emblem
 # `reactor` on this suit is the spider emblem: a body, eight legs and a glowing core,
-# in deep red so it reads against the gold chestplate it is laid on.
+# in navy-black so it reads against the deep crimson chestplate it is laid on — which is
+# exactly how the film suit carries it.
 p = Part()
 
 
@@ -531,7 +545,7 @@ for sx in (1, -1):
             w = lerp(0.0052, 0.0014, t)
             rows.append([emblem_pt(x, y + w, 0.005), emblem_pt(x, y - w, 0.005)])
         p.grid([[r[0] for r in rows], [r[1] for r in rows]], mat=0, flip=(sx < 0))
-P("reactor", p, [RED, GLOW])
+P("reactor", p, [DARK, GLOW])
 
 # ---------------------------------------------------------------- spider legs
 # Four three-segment chains on the upper back. Authored STOWED; `DEPLOY` in the notes
