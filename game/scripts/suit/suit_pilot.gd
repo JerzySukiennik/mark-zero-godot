@@ -82,6 +82,8 @@ func _ready() -> void:
 		visor = Visor.new()
 		visor.name = "Visor"
 		add_child(visor)
+		visor.ready.connect(func():
+			visor.menu.armor_chosen.connect(func(id: String): wear(id)))
 
 func _load_rig(id: String) -> void:
 	if rig != null:
@@ -122,6 +124,33 @@ func _step_local(delta: float) -> void:
 	var look := Pad.look(delta)
 	var move := Pad.move()
 	var aiming := Pad.retro() > 0.25          # L2 — see AIM_TIME_SCALE
+
+	# THE MENU TAKES THE CONTROLS. While it is open the suit holds station and the stick
+	# belongs to the list — flying blind behind an open menu is how a player loses a suit he
+	# was not even in control of.
+	if visor != null and visor.menu != null:
+		if visor.menu.is_open:
+			visor.menu.step(delta / maxf(0.05, Engine.time_scale))
+			Engine.time_scale = 1.0
+			var hold := { thrust = 0.0, retro = 0.0, lateral = 0.0, vertical = 0.0,
+				look = Vector2.ZERO, roll = 0.0, boost = false, aiming = false, firing = false }
+			if _stage != null:
+				model.ground_y = _stage.ground_y
+			model.step(delta, hold)
+			global_position = model.position
+			if rig != null:
+				rig.position = Vector3(0, -FEET_DROP, 0)
+				rig.basis = model.basis_
+			if skel != null:
+				poses.update(delta, model, hold, skel)
+				skel.update_pose(delta)
+			if camera != null:
+				camera.follow(delta, model.position, model.basis_, model.speed, false,
+					model.spec.top_speed)
+			return
+		elif Pad.just_pressed("menu"):
+			visor.menu.open()
+			return
 
 	# THE STICKS FLY IT. Jurek's revision: "R2 do naddźwiękowej, a latanie to po prostu gałki
 	# i X do góry." So there is no throttle button at all — pushing the left stick forward IS

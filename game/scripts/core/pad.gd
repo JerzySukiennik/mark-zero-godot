@@ -1,4 +1,5 @@
 extends Node
+class_name PadInput
 ## The controller, and the only way this game is played.
 ##
 ## Jurek's decision when the project moved to Godot: "tylko kontroler do komputera, czyli
@@ -34,6 +35,11 @@ const BUTTONS := {
 }
 
 ## What the player is told to press. PlayStation names, because the pad is a DualShock.
+##
+## STATIC, and reachable without the autoload. It is a lookup table, and a lookup table has
+## no business requiring a running SceneTree — the menu and the HUD both draw button prompts,
+## and a screenshot tool or a test that renders them must not need the whole input system
+## booted to find out that fire is R1. Same lesson as the armour spec table.
 const GLYPH := {
 	"fire_r": "R1", "fire_l": "L1", "turret": "□", "up": "✕", "down": "L1",
 	"menu": "TOUCHPAD", "interact": "△",
@@ -134,6 +140,6 @@ func pressed(action: String) -> bool:
 func just_pressed(action: String) -> bool:
 	return Input.is_action_just_pressed(action)
 
-## The button glyph for a prompt, e.g. Pad.glyph("interact") -> "□".
-func glyph(action: String) -> String:
+## The button glyph for a prompt, e.g. PadInput.glyph("interact") -> "△".
+static func glyph(action: String) -> String:
 	return GLYPH.get(action, "?")

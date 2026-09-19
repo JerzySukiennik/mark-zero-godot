@@ -50,51 +50,57 @@ func feed(delta: float, look: Vector2, speed: float, hp: float, aiming: bool) ->
 func flash_turret() -> void:
 	_turret_show = 2.5
 
+## Same rule as the menu: sized in units against a 1080p reference, never in raw pixels.
+## A HUD that is right on one screen and a postage stamp on another is not a HUD.
+func _u() -> float:
+	return maxf(0.55, size.y / 1080.0)
+
 func _draw() -> void:
 	var s := size
+	var u := _u()
 	var o := _sway
 
 	# ---- top left: the suit itself -------------------------------------------------
-	_panel(Rect2(o + Vector2(38, 30), Vector2(260, 74)))
-	_label(o + Vector2(52, 50), _armor_name, CYAN, 15)
-	_label(o + Vector2(52, 70), "INTEGRITY", Color(0.6, 0.72, 0.8), 9)
-	_bar(Rect2(o + Vector2(52, 78), Vector2(230, 9)), health,
+	_panel(Rect2(o + Vector2(38, 30) * u, Vector2(300, 84) * u))
+	_label(o + Vector2(54, 54) * u, _armor_name, CYAN, int(19 * u))
+	_label(o + Vector2(54, 76) * u, "INTEGRITY", Color(0.6, 0.72, 0.8), int(12 * u))
+	_bar(Rect2(o + Vector2(54, 84) * u, Vector2(266, 11) * u), health,
 		RED if health < 0.3 else AMBER)
 
 	# ---- top right: what you can shoot with ----------------------------------------
-	var rx := s.x - 298.0
-	_panel(Rect2(o + Vector2(rx, 30), Vector2(260, 74 + (26.0 if _turret_show > 0.0 else 0.0))))
-	_label(o + Vector2(rx + 14, 50), "REPULSORS", Color(0.6, 0.72, 0.8), 9)
+	var rx := s.x - 340.0 * u
+	_panel(Rect2(o + Vector2(rx, 30 * u), Vector2(300 * u, (84 + (30.0 if _turret_show > 0.0 else 0.0)) * u)))
+	_label(o + Vector2(rx + 16 * u, 54 * u), "REPULSORS", Color(0.6, 0.72, 0.8), int(12 * u))
 	# One bar per hand, because they are fired by different buttons and drain separately.
-	_label(o + Vector2(rx + 14, 68), "L", CYAN, 10)
-	_bar(Rect2(o + Vector2(rx + 30, 60), Vector2(214, 9)), repulsor_l, CYAN)
-	_label(o + Vector2(rx + 14, 86), "R", CYAN, 10)
-	_bar(Rect2(o + Vector2(rx + 30, 78), Vector2(214, 9)), repulsor_r, CYAN)
+	_label(o + Vector2(rx + 16 * u, 76 * u), "L", CYAN, int(13 * u))
+	_bar(Rect2(o + Vector2(rx + 34 * u, 66 * u), Vector2(248 * u, 11 * u)), repulsor_l, CYAN)
+	_label(o + Vector2(rx + 16 * u, 98 * u), "R", CYAN, int(13 * u))
+	_bar(Rect2(o + Vector2(rx + 34 * u, 88 * u), Vector2(248 * u, 11 * u)), repulsor_r, CYAN)
 	if _turret_show > 0.0:
 		# The turret bar is not always on screen: a readout that is always there is
 		# furniture, one that appears when it matters is information.
 		var a: float = clampf(_turret_show, 0.0, 1.0)
-		_label(o + Vector2(rx + 14, 104), "T", AMBER * Color(1, 1, 1, a), 10)
-		_bar(Rect2(o + Vector2(rx + 30, 96), Vector2(214, 9)), turret, AMBER * Color(1, 1, 1, a))
+		_label(o + Vector2(rx + 16 * u, 120 * u), "T", AMBER * Color(1, 1, 1, a), int(13 * u))
+		_bar(Rect2(o + Vector2(rx + 34 * u, 110 * u), Vector2(248 * u, 11 * u)), turret, AMBER * Color(1, 1, 1, a))
 
 	# ---- bottom left: speed --------------------------------------------------------
-	_label(o + Vector2(44, s.y - 74), "%d" % roundi(_speed), CYAN, 34)
-	_label(o + Vector2(44, s.y - 50), "M/S", Color(0.6, 0.72, 0.8), 9)
+	_label(o + Vector2(46 * u, s.y - 82 * u), "%d" % roundi(_speed), CYAN, int(42 * u))
+	_label(o + Vector2(46 * u, s.y - 54 * u), "M/S", Color(0.6, 0.72, 0.8), int(12 * u))
 	if _mach > 0.55:
-		_label(o + Vector2(120, s.y - 50), "MACH %.2f" % _mach,
-			AMBER if _mach >= 1.0 else Color(0.6, 0.72, 0.8), 11)
+		_label(o + Vector2(136 * u, s.y - 54 * u), "MACH %.2f" % _mach,
+			AMBER if _mach >= 1.0 else Color(0.6, 0.72, 0.8), int(14 * u))
 
 	# ---- centre: the reticle, only while aiming ------------------------------------
 	if _aiming > 0.01:
 		var c := s * 0.5 + o * 0.35        # the reticle sways less than the frame around it
 		var col := Color(CYAN.r, CYAN.g, CYAN.b, _aiming)
-		var r := lerpf(34.0, 22.0, _aiming)
-		draw_arc(c, r, 0, TAU, 48, col, 1.5, true)
+		var r := lerpf(38.0, 25.0, _aiming) * u
+		draw_arc(c, r, 0, TAU, 48, col, maxf(1.5, 1.8 * u), true)
 		for i in 4:
 			var ang := i * PI * 0.5 + PI * 0.25
 			var d := Vector2(cos(ang), sin(ang))
-			draw_line(c + d * (r + 5), c + d * (r + 13), col, 1.5, true)
-		draw_circle(c, 1.6, col)
+			draw_line(c + d * (r + 6 * u), c + d * (r + 15 * u), col, maxf(1.5, 1.8 * u), true)
+		draw_circle(c, 2.0 * u, col)
 
 func _panel(r: Rect2) -> void:
 	draw_rect(r, Color(0.02, 0.05, 0.08, 0.42), true)

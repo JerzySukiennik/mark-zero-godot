@@ -7,6 +7,7 @@ extends CanvasLayer
 ## shader on the whole screen would bend the city too, which is a camera lens, not a helmet.
 
 var hud: Hud
+var menu: SuitMenu
 var _vp: SubViewport
 var _screen: TextureRect
 
@@ -21,6 +22,18 @@ func _ready() -> void:
 	hud = Hud.new()
 	hud.name = "Hud"
 	_vp.add_child(hud)
+
+	# The menu goes through the SAME glass as the HUD. It is the suit's own display, not the
+	# game engine's — a menu that looks like it belongs to Godot breaks the one illusion the
+	# whole project rests on.
+	menu = SuitMenu.new()
+	menu.name = "Menu"
+	_vp.add_child(menu)
+	# The flight HUD stands down while the menu is up. Two interfaces on one piece of glass
+	# is two things competing for the same corners, and in the first render the integrity
+	# panel sat straight through the menu's title.
+	menu.opened.connect(func(): hud.visible = false)
+	menu.closed.connect(func(): hud.visible = true)
 
 	var mat := ShaderMaterial.new()
 	mat.shader = load("res://shaders/visor.gdshader")
@@ -42,3 +55,4 @@ func _target_size() -> Vector2i:
 func _resize() -> void:
 	_vp.size = _target_size()
 	hud.size = _vp.size
+	menu.size = _vp.size
