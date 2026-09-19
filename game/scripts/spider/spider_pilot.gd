@@ -71,11 +71,11 @@ func _ready() -> void:
 		visor = Visor.new()
 		visor.name = "Visor"
 		add_child(visor)
-		visor.ready.connect(func():
-			visor.menu.hero_chosen.connect(func(id: String): Net.announce_hero(id))
-			# The roster panel is fed rather than reaching for Net itself, so refresh it
-			# whenever it comes up.
-			visor.menu.opened.connect(func(): _feed_roster()))
+		# Same as SuitPilot: NOT off visor.ready, which has already fired by the time
+		# add_child returns.
+		visor.menu.hero_chosen.connect(func(id: String): Net.announce_hero(id))
+		visor.menu.opened.connect(func(): _feed_roster())
+		_feed_roster()
 
 func _load_body() -> void:
 	for path: String in BODIES:

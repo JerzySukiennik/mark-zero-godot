@@ -99,14 +99,21 @@ func _ready() -> void:
 		visor = Visor.new()
 		visor.name = "Visor"
 		add_child(visor)
-		visor.ready.connect(func():
-			visor.menu.armor_chosen.connect(func(id: String): wear(id))
-			# Switching hero replaces the whole entity, so it goes through Net and the
-			# arena rebuilds — this node is about to be freed and must not try to react.
-			visor.menu.hero_chosen.connect(func(id: String): Net.announce_hero(id))
-			# The roster panel is fed rather than reaching for Net itself, so refresh it
-			# whenever it comes up.
-			visor.menu.opened.connect(func(): _feed_roster()))
+		# CONNECTED HERE, NOT OFF visor.ready.
+		#
+		# add_child fires the child's _ready SYNCHRONOUSLY when the parent is already in the
+		# tree, which it is — this is the parent's own _ready. So `ready` had been emitted
+		# and gone before the connect ran, and every one of these handlers was dead code.
+		# That is the whole of "dalej sie nie zmienia Spider-Man", and the armour bay not
+		# responding either. The menu exists by now because Visor._ready made it.
+		visor.menu.armor_chosen.connect(func(id: String): wear(id))
+		# Switching hero replaces the whole entity, so it goes through Net and the arena
+		# rebuilds — this node is about to be freed and must not try to react.
+		visor.menu.hero_chosen.connect(func(id: String): Net.announce_hero(id))
+		# The roster panel is fed rather than reaching for Net itself, so refresh it
+		# whenever it comes up.
+		visor.menu.opened.connect(func(): _feed_roster())
+		_feed_roster()
 
 func _load_rig(id: String) -> void:
 	if rig != null:

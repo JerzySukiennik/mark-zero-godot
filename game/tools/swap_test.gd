@@ -35,8 +35,22 @@ func _ready() -> void:
 	_ok(first != null and first is SuitPilot, "and it is the armour")
 	_ok(Net.players[1].get("armor", "") == "mk1", "wearing the Mark I")
 
-	print("=== switching to Spider-Man ===")
-	Net.announce_hero("spiderman")
+	print("=== switching to Spider-Man, THROUGH THE MENU ===")
+	# Through the menu, not by calling Net. Driving Net directly is what let this pass while
+	# the game was broken: the menu's signals were connected off visor.ready, which had
+	# already fired, so every handler was dead and pressing X did nothing but print
+	# "SELECTED". A test that skips the step the player actually takes tests nothing about
+	# that step.
+	var menu: SuitMenu = first.visor.menu
+	_ok(menu != null, "the armour has a menu")
+	_ok(menu.hero_chosen.get_connections().size() > 0,
+		"and something is LISTENING to hero_chosen (%d)" % menu.hero_chosen.get_connections().size())
+	_ok(menu.armor_chosen.get_connections().size() > 0,
+		"and to armor_chosen too (%d)" % menu.armor_chosen.get_connections().size())
+	menu.open()
+	menu.tab = 0
+	menu.row = 1                      # SPIDER-MAN
+	menu._accept()
 	await get_tree().process_frame
 	await get_tree().create_timer(0.3).timeout
 
@@ -49,11 +63,29 @@ func _ready() -> void:
 		_ok(now.rig != null, "he has a body")
 		_ok(now.skel != null and now.skel.has_pivot("piv_palmL"), "and a rig with hands")
 
-	print("=== and back again ===")
-	Net.announce_hero("ironman")
+	print("=== and back again, also through the menu ===")
+	var m2: SuitMenu = now.visor.menu
+	m2.open()
+	m2.tab = 0
+	m2.row = 0                        # IRON MAN
+	m2._accept()
 	await get_tree().process_frame
 	await get_tree().create_timer(0.3).timeout
 	_ok(arena.suits.get(1) is SuitPilot, "switching back returns the armour")
+
+	print("=== and the armour bay actually dresses him ===")
+	var back = arena.suits.get(1)
+	if back is SuitPilot:
+		var m3: SuitMenu = back.visor.menu
+		m3.open()
+		m3.tab = 1                    # ARMOUR BAY
+		m3.row = 0                    # MARK I, the one that is free
+		m3.owned["mk3"] = true
+		m3.row = 2                    # MARK III
+		m3._accept()
+		await get_tree().process_frame
+		_ok(back.armor_id == "mk3", "picking an armour changes it (%s)" % back.armor_id)
+		_ok(Net.local_armor == "mk3", "and the roster agrees (%s)" % Net.local_armor)
 
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	get_tree().quit(1 if bad > 0 else 0)

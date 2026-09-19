@@ -117,6 +117,46 @@ func _process(_d: float) -> bool:
 	_ok(pa.y < sh.y - 0.35, "with the hands well below the shoulders")
 	_ok(h.thrust_mag >= FlightModel.HOVER_BURN, "and the repulsors are burning (%.2f)" % h.thrust_mag)
 
+	print("=== the arms through a slide ===")
+	# A full sideways slide must produce a real ASYMMETRY — one arm reaching away from the
+	# turn, the other tucked across it — and neither hand may cross the body's centre line.
+	#
+	# It failed both ways at once, and the cause is worth guarding: the two shoulder pivots
+	# have MIRRORED local frames, so giving them opposite signs rotates them the same way in
+	# body space. That is symmetric. A full slide threw both hands across the chest in one
+	# direction and flung both of them wide in the other.
+	for dir: float in [1.0, -1.0]:
+		var fresh: Node3D = SuitLoaderS.load_suit("res://assets/suits/mk1.glb")
+		root.add_child(fresh)
+		var rg := SuitRig.new(); rg.index(fresh)
+		var pz := Poses.new()
+		var fm := FlightModel.new(); fm.set_armor("mk1")
+		fm.position = Vector3(0, 300, 0)
+		for i in 900:
+			var c := { thrust = 0.7, retro = 0.0, lateral = dir, vertical = 0.0,
+				walk = Vector2.ZERO, look = Vector2.ZERO, roll = 0.0, boost = false,
+				aiming = false, firing = false }
+			fm.step(1.0 / 120.0, c)
+			pz.update(1.0 / 120.0, fm, c, rg)
+			rg.update_pose(1.0 / 120.0)
+
+		var hips: Vector3 = (rg.pivots["piv_hips"] as Node3D).global_position
+		var pL: float = (rg.pivots["piv_palmL"] as Node3D).global_position.x - hips.x
+		var pR: float = (rg.pivots["piv_palmR"] as Node3D).global_position.x - hips.x
+		var sL: float = (rg.pivots["piv_shoulderL"] as Node3D).global_position.x - hips.x
+		var sR: float = (rg.pivots["piv_shoulderR"] as Node3D).global_position.x - hips.x
+		var tag := "right" if dir > 0.0 else "left"
+
+		_ok(pL > 0.0 and pR < 0.0,
+			"sliding %s, neither hand crosses the body (L %+.3f, R %+.3f)" % [tag, pL, pR])
+		# Each hand keeps a clear margin on its own side rather than sitting on the midline.
+		_ok(absf(pL) > absf(sL) * 0.2 and absf(pR) > absf(sR) * 0.2,
+			"and both keep clear of the midline sliding %s" % tag)
+		# And the two arms must be doing DIFFERENT things, or it is not a turn.
+		_ok(absf(absf(pL) - absf(pR)) > 0.18,
+			"the arms are asymmetric sliding %s (%.2f apart)" % [tag, absf(absf(pL) - absf(pR))])
+		fresh.queue_free()
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	quit(1 if bad > 0 else 0)
 	return true

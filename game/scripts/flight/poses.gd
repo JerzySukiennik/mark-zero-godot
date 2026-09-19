@@ -118,15 +118,21 @@ func _drive(delta: float, model: FlightModel, cmd: Dictionary, rig: SuitRig) -> 
 	# was too faint to read at all — a suit sliding sideways looked exactly like a suit
 	# hanging still. It also now drives the ELBOWS and the legs, because a real turn is the
 	# whole body committing to it rather than two shoulders moving politely.
-	rig.add_offset("piv_shoulderL", Z_AX, -slide * 0.58)
-	rig.add_offset("piv_shoulderR", Z_AX, slide * 0.58)
-	# The inside arm folds in towards the chest; the outside one reaches away. Which is
-	# which flips with the direction, which is what the signed max is doing.
-	rig.add_offset("piv_elbowL", X_AX, -maxf(0.0, slide) * 0.45)
-	rig.add_offset("piv_elbowR", X_AX, -maxf(0.0, -slide) * 0.45)
+	# THE SAME SIGN ON BOTH SHOULDERS, which looks wrong and is the entire point. The two
+	# shoulder pivots have MIRRORED local frames, so opposite signs rotate them the same way
+	# in body space — that is symmetric, not asymmetric, and it is why a full slide threw
+	# both hands across the chest one way and flung both of them wide the other. Jurek:
+	# "rece sie tak do srodka w ogole daja i totalnie psuja." Matching signs give the real
+	# thing: one arm opens away from the turn while the other tucks in across it.
+	rig.add_offset("piv_shoulderL", Z_AX, -slide * 0.26)
+	rig.add_offset("piv_shoulderR", Z_AX, -slide * 0.26)
+	# The tucked arm bends; the reaching one stays straight. Mirrored frames again, so the
+	# side that folds is picked by the sign of the slide rather than by the pivot's name.
+	rig.add_offset("piv_elbowL", X_AX, -maxf(0.0, slide) * 0.30)
+	rig.add_offset("piv_elbowR", X_AX, -maxf(0.0, -slide) * 0.30)
 	# The legs trail out of the turn, the way they do behind a motorbike leaning over.
-	rig.add_offset("piv_hipL", Z_AX, -slide * 0.22)
-	rig.add_offset("piv_hipR", Z_AX, slide * 0.22)
+	rig.add_offset("piv_hipL", Z_AX, -slide * 0.16)
+	rig.add_offset("piv_hipR", Z_AX, -slide * 0.16)
 	# And he looks WHERE HE IS GOING. A head locked forward through a sideways slide is the
 	# clearest possible sign that the body is being dragged rather than steering.
 	rig.add_offset("piv_neck", Z_AX, slide * 0.14)
