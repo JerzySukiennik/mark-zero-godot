@@ -145,5 +145,25 @@ func _ready() -> void:
 		_ok(back.armor_id == "mk3", "picking an armour changes it (%s)" % back.armor_id)
 		_ok(Net.local_armor == "mk3", "and the roster agrees (%s)" % Net.local_armor)
 
+	print("=== switching over and over ===")
+	# "Dalej tylko bardzo rzadko dziala stroj Iron Spider." Intermittent is the hardest kind
+	# of report to act on, so this just does it eight times and checks every single one —
+	# a race in the teardown would show up as one bad round in the middle rather than as a
+	# clean pass or a clean fail.
+	var misses := 0
+	for i in 8:
+		var want := "spiderman" if i % 2 == 0 else "ironman"
+		Net.announce_hero(want)
+		await get_tree().process_frame
+		await get_tree().create_timer(0.2).timeout
+		var who = arena.suits.get(1)
+		var ok_now := who != null and ((want == "spiderman" and who is SpiderPilot)
+			or (want == "ironman" and who is SuitPilot))
+		if not ok_now:
+			misses += 1
+		elif who is SpiderPilot and (who.rig == null or who.skel == null):
+			misses += 1        # spawned, but with no body — which looks the same from the pad
+	_ok(misses == 0, "eight switches in a row, all of them took (%d missed)" % misses)
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	get_tree().quit(1 if bad > 0 else 0)

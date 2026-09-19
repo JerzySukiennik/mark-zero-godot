@@ -31,31 +31,50 @@ func build() -> void:
 	_built = true
 	_plate()
 	_grid()
-	_tower()
+	_towers()
 
 ## ONE building. Not a city — the plate is still the point — but Spider-Man cannot swing
 ## off nothing, and a web fired into an empty sky is a mechanic with no world to use it on.
 ## Jurek: "nie ma zadnych budynkow. Wiec moze dodaj jeden budynek."
 ##
-## Tall and close to the spawn, because the whole test is whether you can look at something,
-## hit it, and swing. Hunting for it would be a different game.
-const TOWER_HEIGHT := 180.0
+## A HANDFUL, not one, and not a city.
+##
+## One tower was enough to prove a web could stick to something. It is not enough for what
+## Jurek actually described — swing, let go, hop, swing again, "w kolko" — because that
+## loop needs the NEXT anchor to already be in front of you when you release the last one.
+## With a single tower every swing ends in a walk back. So: a scattered line of them down
+## the plate, varied in height so the arcs vary, and still nothing like scenery.
 const TOWER_WIDTH := 34.0
-const TOWER_AT := Vector3(0, 0, -95)
+## x, z, height. Spread along -Z, which is the direction the suits spawn facing.
+const TOWERS := [
+	Vector3(0, -95, 180.0),
+	Vector3(-72, -190, 135.0),
+	Vector3(64, -235, 210.0),
+	Vector3(-30, -330, 160.0),
+	Vector3(88, -410, 120.0),
+	Vector3(-96, -470, 195.0),
+	Vector3(12, -560, 150.0),
+	Vector3(-58, -660, 225.0),
+	Vector3(78, -730, 140.0),
+]
 
-func _tower() -> void:
+func _towers() -> void:
+	for t: Vector3 in TOWERS:
+		_tower(Vector3(t.x, 0, t.y), t.z)
+
+func _tower(at: Vector3, height: float) -> void:
 	var root := Node3D.new()
 	root.name = "Tower"
-	root.position = TOWER_AT
+	root.position = at
 	add_child(root)
 
 	var bm := BoxMesh.new()
-	bm.size = Vector3(TOWER_WIDTH, TOWER_HEIGHT, TOWER_WIDTH)
+	bm.size = Vector3(TOWER_WIDTH, height, TOWER_WIDTH)
 	var mi := MeshInstance3D.new()
 	mi.mesh = bm
-	mi.position.y = TOWER_HEIGHT * 0.5
+	mi.position.y = height * 0.5
 	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(0.20, 0.22, 0.26)
+	m.albedo_color = Color(0.055, 0.060, 0.070)
 	m.metallic = 0.35
 	m.roughness = 0.42
 	mi.material_override = m
@@ -68,13 +87,13 @@ func _tower() -> void:
 	bmi.mesh = bands
 	var lm := StandardMaterial3D.new()
 	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	lm.albedo_color = Color(0.45, 0.58, 0.72, 0.55)
+	lm.albedo_color = Color(0.85, 0.92, 1.0, 0.65)
 	lm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	bmi.material_override = lm
 	bands.surface_begin(Mesh.PRIMITIVE_LINES)
 	var h := TOWER_WIDTH * 0.5 + 0.05
 	var y := 6.0
-	while y < TOWER_HEIGHT:
+	while y < height:
 		for c: Vector2 in [Vector2(-h, -h), Vector2(h, -h), Vector2(h, h), Vector2(-h, h)]:
 			bands.surface_add_vertex(Vector3(c.x, y, c.y))
 		# Close the ring: four segments need the first corner again at the end.
@@ -92,7 +111,7 @@ func _tower() -> void:
 	var sh := BoxShape3D.new()
 	sh.size = bm.size
 	cs.shape = sh
-	cs.position.y = TOWER_HEIGHT * 0.5
+	cs.position.y = height * 0.5
 	body.add_child(cs)
 	root.add_child(body)
 
@@ -103,7 +122,12 @@ func _plate() -> void:
 	mi.mesh = bm
 	mi.position.y = GROUND_Y - 1.0
 	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(0.13, 0.14, 0.16)
+	# NEAR BLACK. The sky had to be turned up a long way to get the armour off black — see
+	# arena.gd — and the plate came up with it: "cala mapa nagle jest niebieska, a powinna
+	# byc czarna, z takimi paskami bialymi". The plate is a dielectric and the suit is
+	# metal, so they can be separated: drop the plate's albedo until the brighter sky lands
+	# it back where it was, and leave the metal alone.
+	m.albedo_color = Color(0.030, 0.032, 0.036)
 	m.roughness = 0.92
 	m.metallic = 0.0
 	mi.material_override = m
@@ -129,7 +153,10 @@ func _grid() -> void:
 	for i in n + 1:
 		var p := -half + i * CELL
 		# Every fifth line is brighter, so there is a coarse scale as well as a fine one.
-		var c := Color(0.42, 0.46, 0.52) if i % 5 == 0 else Color(0.22, 0.24, 0.27)
+		# WHITE LINES on a black plate, which is how Jurek has always described it and how
+		# it read before the sky went up. Every fifth line is full white so there is a
+		# coarse grid to judge distance against as well as a fine one.
+		var c := Color(1.0, 1.0, 1.0) if i % 5 == 0 else Color(0.55, 0.58, 0.62)
 		st.set_color(c); st.add_vertex(Vector3(p, 0.02, -half))
 		st.set_color(c); st.add_vertex(Vector3(p, 0.02, half))
 		st.set_color(c); st.add_vertex(Vector3(-half, 0.02, p))

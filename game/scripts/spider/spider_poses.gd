@@ -121,6 +121,14 @@ func update(delta: float, model: SpiderModel, hands: Dictionary, rig: SuitRig) -
 	if rig == null:
 		return
 	rig.pose_table = POSES
+	# CLEARED FIRST, EVERY FRAME. add_offset ACCUMULATES — it multiplies onto whatever is
+	# already there, because several drivers write to one joint per frame and a plain
+	# assignment would let the last one silently delete the rest. Which means the whole set
+	# has to be thrown away at the top of each frame, and this never did it: the neck's
+	# 0.10 rad idle turn compounded at 120 Hz into roughly two full revolutions a second.
+	# "Kreci mu sie glowa w kolko" was exactly that, and the same accumulation was wrecking
+	# every other joint, which is why the walk looked deranged.
+	rig.clear_offsets()
 	_choose(delta, model, hands)
 	rig.set_pose_weights(blend)
 	_drive(delta, model, hands, rig)

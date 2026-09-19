@@ -153,5 +153,33 @@ func _initialize() -> void:
 	_ok(slowest > fastest * 0.35,
 		"and none is hopeless (%.0f m/s of %.0f)" % [slowest, fastest])
 
+	print("=== the back-diagonal ===")
+	# "Czasami zwalnia do siedmiu kilometrow na godzine." The retro burn decided whether it
+	# was a BRAKE or reverse THRUST from total speed, so sliding sideways fast and pulling
+	# back read as "still going far too quickly to reverse" — and then braked the slide the
+	# player was actively asking for. Two seconds of that is walking pace.
+	var bd := FlightModel.new()
+	bd.set_armor("mk3")
+	bd.position = Vector3(0, 2000, 0)
+	for i in 1800:
+		bd.step(STEP, { thrust = 0.0, retro = 0.87, lateral = 0.5, vertical = 0.0,
+			walk = Vector2.ZERO, look = Vector2.ZERO, roll = 0.0, boost = false,
+			aiming = false, firing = false })
+	_ok(bd.speed > 60.0, "holding back-and-right actually flies (%.0f m/s)" % bd.speed)
+	var bb := bd.basis_.inverse() * bd.velocity
+	_ok(bb.x > 20.0, "and the commanded slide survives the brake (%.0f m/s sideways)" % bb.x)
+	_ok(bb.z > 20.0, "while still going backwards (%.0f m/s)" % bb.z)
+
+	# The auto-brake must still stop dead rather than reversing on its own.
+	var ab := FlightModel.new()
+	ab.set_armor("mk3")
+	ab.position = Vector3(0, 2000, 0)
+	ab.velocity = Vector3(0, 0, -180)
+	for i in 1200:
+		ab.step(STEP, { thrust = 0.0, retro = 0.55, brake_only = true, lateral = 0.0,
+			vertical = 0.0, walk = Vector2.ZERO, look = Vector2.ZERO, roll = 0.0,
+			boost = false, aiming = false, firing = false })
+	_ok(ab.speed < 6.0, "and letting go still stops it dead (%.1f m/s)" % ab.speed)
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	quit(1 if bad > 0 else 0)

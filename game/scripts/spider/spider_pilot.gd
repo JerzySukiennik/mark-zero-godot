@@ -26,6 +26,19 @@ const THWIP_ANGLE := deg_to_rad(95.0)
 ## How far the trigger has to be squeezed to throw a web. Well past the resting slop on a
 ## DualShock, and short of the hard stop so it does not need a deliberate clench.
 const TRIGGER_FIRE := 0.35
+## Mid-air hops, and what each one is worth.
+const MAX_HOPS := 2
+const HOP_UP := 7.5
+const HOP_FWD := 9.0
+## Where a web looks for an anchor: up and ahead, not wherever the camera happens to point.
+const SWING_ELEVATION := deg_to_rad(52.0)
+## How wide a fan of rays is tried before giving up.
+const SWING_FAN := 5
+const SWING_SPREAD := deg_to_rad(26.0)
+## The pull into the arc when a web lands: it shortens and hauls, rather than going taut
+## and leaving you hanging.
+const CATCH_SHORTEN := 0.88
+const CATCH_LIFT := 6.0
 const FEET_DROP := 1.0
 const AIM_TIME_SCALE := 0.35
 
@@ -47,6 +60,9 @@ var line := { "R": null, "L": null }
 var _throw := { "R": 0.0, "L": 0.0 }
 ## Trigger edges, so holding fires ONE web rather than one per frame.
 var _held := { "R": false, "L": false }
+var _hops := MAX_HOPS
+## Webs that landed this frame and still owe the player their pull into the arc.
+var _catch_pending := { "R": false, "L": false }
 
 var _stage: Stage
 var _shoot_t := 0.0
@@ -108,8 +124,10 @@ func _physics_process(delta: float) -> void:
 
 	var move := Pad.move()
 	var look := Pad.look(delta)
-	var aiming := Pad.retro() > 0.25
-	Engine.time_scale = AIM_TIME_SCALE if aiming else 1.0
+	# NO AIM TRIGGER. L2 is the left web now, and it was ALSO slowing the world to a third
+	# — so every left-handed web throw put the game into slow motion, which is most of what
+	# "to jest takie napiete i w ogole" was describing.
+	var aiming := false
 
 	# THE MENU. Spider-Man simply had no branch for it — the touchpad did nothing at all
 	# once you were wearing the Iron Spider, which also meant no way back to Iron Man.
@@ -133,6 +151,37 @@ func _physics_process(delta: float) -> void:
 		# goes straight into the model. Dividing by the mass again would have made the rope
 		# almost seventy times too weak.
 		rope += t.step(delta, model.position, model.velocity, reel)
+
+		# THE CATCH, the frame the line goes tight. A rope that only goes taut leaves you
+		# swinging under the anchor from wherever you happened to be; converting the drop
+		# into an arc needs the line pulled IN and the body lifted, once. This is the
+		# "automatycznie trochę go tak jakby podnosi i już zaczyna lecieć łukiem" part, and
+		# without it the first swing reads as being stopped rather than picked up.
+		if _catch_pending[hand] and t.state == WebTether.ATTACHED:
+			_catch_pending[hand] = false
+			t.rest_length = maxf(WebTether.MIN_LENGTH, t.rest_length * CATCH_SHORTEN)
+			model.velocity.y = maxf(model.velocity.y, 0.0) + CATCH_LIFT
+			# And it keeps whatever speed he already had, pointed along the arc rather
+			# than at the anchor, which is what stops a catch feeling like a jerk.
+			var to_anchor := (t.anchor_point() - model.position).normalized()
+			var along := model.velocity - to_anchor * model.velocity.dot(to_anchor)
+			model.velocity = along + to_anchor * maxf(0.0, model.velocity.dot(to_anchor)) * 0.35
+
+	# AIR HOPS. Jurek's loop: swing, let go, "w powietrzu może przycisnąć X parę razy, żeby
+	# poskakać sobie w powietrzu", then web again. Without them a release is the end of the
+	# run — you fall, and the next anchor is always slightly out of reach. They are limited
+	# and refill on the ground or on a fresh web, so the loop is web-swing-hop rather than
+	# free flight, which is Iron Man's job.
+	var hopped := false
+	if not model.grounded and Pad.just_pressed("up") and _hops > 0:
+		_hops -= 1
+		hopped = true
+		var fwd := model.basis_ * Vector3(0, 0, -1)
+		model.velocity.y = maxf(model.velocity.y, 0.0) + HOP_UP
+		model.velocity += fwd * HOP_FWD
+		Rumble.landing(0.3)
+	if model.grounded:
+		_hops = MAX_HOPS
 
 	var cmd := {
 		walk = move,
@@ -163,7 +212,7 @@ func _physics_process(delta: float) -> void:
 	_draw_webs()
 
 	if camera != null:
-		camera.follow(delta, model.position, model.basis_, model.speed, aiming, 120.0)
+		camera.follow(delta, model.position, model.view_basis, model.speed, aiming, 120.0)
 	if visor != null and visor.hud != null:
 		visor.hud.feed(delta / maxf(0.05, Engine.time_scale), look, model.speed, health, aiming)
 		# A hand holding a web reads as spent; a free hand reads as loaded. Crude, and it is
@@ -200,29 +249,80 @@ func _service_web(hand: String, delta: float) -> void:
 	var from := _hand_point(hand)
 	var eye := camera.global_position if camera != null else from
 	var aim := -camera.global_transform.basis.z if camera != null else -model.basis_.z
-	# A SUIT FIRST, THEN THE WORLD.
+	# AIMED HIGH AND AHEAD, not wherever the camera points.
 	#
-	# The cone test is for moving targets, where a ray through one instant would almost
-	# always miss. Buildings do not move and are enormous, so for those a ray is both
-	# simpler and more honest — it sticks the web exactly where the player was pointing
-	# rather than at some node's origin inside the wall.
-	var target := WebTether.pick(eye, aim, _targets())
-	var hit_at := Vector3.INF
-	if target == null:
-		var space := get_world_3d().direct_space_state
-		var q := PhysicsRayQueryParameters3D.create(eye, eye + aim * WebTether.MAX_RANGE)
-		q.collide_with_areas = false
-		var hit := space.intersect_ray(q)
-		if not hit.is_empty() and hit.collider is Node3D:
-			# The plate is not something to swing from — a web stuck to the floor is a
-			# tripwire. Anything meaningfully above the ground is fair.
-			if (hit.position as Vector3).y > (_stage.ground_y + 3.0 if _stage != null else 3.0):
-				target = hit.collider
-				hit_at = hit.position
+	# This is the difference between the mechanic Jurek described and the one that was
+	# here. Pointing the reticle at a building and firing gives you a rope to a wall; what
+	# he asked for is "strzela siecią wysoko i automatycznie trochę go tak jakby podnosi i
+	# już zaczyna lecieć łukiem". So the web looks for an anchor UP and AHEAD of where he is
+	# travelling — a fan of rays at about fifty degrees of elevation — and takes the best
+	# one. The camera only decides which way "ahead" is.
+	var target := _find_swing_anchor(from)
+	var hit_at: Vector3 = target[1]
+	var node: Node3D = target[0]
 
-	if target != null and t.fire(from, target, hit_at):
+	if node != null and t.fire(from, node, hit_at):
 		_throw[hand] = 1.0
 		Rumble.landing(0.25)
+		# AND IT CATCHES. A rope that simply goes taut leaves you hanging under the anchor;
+		# a swing has to convert the fall into an arc. Shortening the line as it lands and
+		# adding a lift does exactly that, and it is why the first swing feels like being
+		# picked up rather than like stopping.
+		_catch_pending[hand] = true
+		# Landing a web is also what refills the hops, so the loop pays for itself.
+		_hops = MAX_HOPS
+
+## Looks for something to swing from: up, and ahead of where he is going.
+##
+## Returns [node, world point] or [null, INF]. A fan rather than a single ray, because one
+## ray through a gap between towers misses everything and the throw silently does nothing —
+## which is what "tylko czasami strzela" was.
+func _find_swing_anchor(from: Vector3) -> Array:
+	var space := get_world_3d().direct_space_state
+	if space == null:
+		return [null, Vector3.INF]
+
+	# "Ahead" is where he is MOVING if he is moving, and where he is facing if he is not.
+	# Using the camera alone meant a glance sideways mid-swing threw the next web sideways.
+	var ahead := model.basis_ * Vector3(0, 0, -1)
+	var flat := Vector3(model.velocity.x, 0.0, model.velocity.z)
+	if flat.length() > 6.0:
+		ahead = ahead.lerp(flat.normalized(), 0.6).normalized()
+
+	var best_node: Node3D = null
+	var best_at := Vector3.INF
+	var best_score := -1e9
+	var right := ahead.cross(Vector3.UP).normalized()
+
+	for i in SWING_FAN:
+		# Centred fan: 0, -1, +1, -2, +2 ... so the straight-ahead ray is tried first.
+		var step := (i + 1) / 2
+		var side := (-1.0 if i % 2 == 1 else 1.0) * step
+		var yawed := ahead.rotated(Vector3.UP, side * SWING_SPREAD)
+		var dir := (yawed * cos(SWING_ELEVATION) + Vector3.UP * sin(SWING_ELEVATION)).normalized()
+		var q := PhysicsRayQueryParameters3D.create(from, from + dir * WebTether.MAX_RANGE)
+		q.collide_with_areas = false
+		var hit := space.intersect_ray(q)
+		if hit.is_empty() or not (hit.collider is Node3D):
+			continue
+		var at: Vector3 = hit.position
+		if at.y < from.y + 8.0:
+			continue          # not an anchor to swing from, just a wall in the way
+		# Prefer high and straight ahead. Height buys arc; a wide angle costs control.
+		var score := (at.y - from.y) - absf(side) * 14.0
+		if score > best_score:
+			best_score = score
+			best_node = hit.collider
+			best_at = at
+	# Nothing overhead — fall back to whatever the player is actually pointing at, so
+	# aiming deliberately at a low anchor still works.
+	if best_node == null and camera != null:
+		var eye := camera.global_position
+		var aim := -camera.global_transform.basis.z
+		var suit := WebTether.pick(eye, aim, _targets())
+		if suit != null:
+			return [suit, Vector3.INF]
+	return [best_node, best_at]
 
 ## Everything a web can stick to. Right now that is the armours — which is exactly the
 ## feature asked for — and the list is built fresh because the roster changes.

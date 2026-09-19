@@ -99,6 +99,29 @@ func _process(_d: float) -> bool:
 	_ok(fr.pose_table == SpiderPoses.POSES,
 		"the rig is reading SpiderPoses, not the armour's stances")
 
+	print("=== nothing drifts ===")
+	# THE ACCUMULATION TRAP. add_offset multiplies onto what is already there, so a driver
+	# that forgets to clear turns a constant offset into a constant ANGULAR VELOCITY. The
+	# idle neck sway compounded into about two head revolutions a second. Standing
+	# perfectly still for ten seconds, nothing may have travelled anywhere.
+	var g := _fresh()
+	(g[3] as SpiderModel).position = Vector3(0, 1, 0)
+	_run(g, none, 0.5)
+	var gr: SuitRig = g[1]
+	var marks: Dictionary = {}
+	for k: String in ["piv_neck", "piv_head", "piv_chest", "piv_hipL", "piv_shoulderR"]:
+		if gr.has_pivot(k):
+			marks[k] = (gr.pivots[k] as Node3D).global_position
+	_run(g, none, 10.0)
+	var worst := 0.0
+	var worst_name := ""
+	for k: String in marks:
+		var moved: float = (marks[k] as Vector3).distance_to((gr.pivots[k] as Node3D).global_position)
+		if moved > worst:
+			worst = moved
+			worst_name = k
+	_ok(worst < 0.05, "ten seconds of standing still moves nothing (worst %s, %.3f m)" % [worst_name, worst])
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	quit(1 if bad > 0 else 0)
 	return true

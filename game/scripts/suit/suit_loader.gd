@@ -95,6 +95,16 @@ static func _pack_owner(node: Node, root: Node) -> void:
 ## Polishing it is also just correct. Tony's armour is a mirror.
 const MAX_ROUGHNESS := 0.34
 const MIN_SPECULAR := 0.55
+## A FLOOR UNDER THE ARMOUR, so it never goes to pure black.
+##
+## Jurek wants two things that fight: a map that is black with white lines, and a suit that
+## is not a silhouette. Turning the SKY up gives the second and loses the first, because
+## the sky lights everything; turning the LIGHTS up does almost nothing, because polished
+## metal answers a directional with a small sharp highlight rather than a broad wash. A
+## little emission on the plates is the one lever that touches the suit and nothing else.
+## It is the same trick as a rim light on a film set: not physical, and it is what makes a
+## dark subject readable against a dark background.
+const PLATE_GLOW := 0.11
 ##
 ## NOT by lifting albedo. That was tried at 1.75 and at 1.18 and both rendered the armour
 ## as a featureless white blob, which is not a tuning miss — for a METAL, albedo_color is
@@ -112,5 +122,12 @@ static func _polish(n: Node) -> void:
 					var sm: StandardMaterial3D = m
 					sm.roughness = minf(sm.roughness, MAX_ROUGHNESS)
 					sm.metallic_specular = maxf(sm.metallic_specular, MIN_SPECULAR)
+					if sm.albedo_texture != null:
+						# Driven from the plate's OWN texture, so a red panel glows red and
+						# a gold one gold — a flat white lift would grey the whole suit out.
+						sm.emission_enabled = true
+						sm.emission_texture = sm.albedo_texture
+						sm.emission = Color(1, 1, 1)
+						sm.emission_energy_multiplier = PLATE_GLOW
 	for c in n.get_children():
 		_polish(c)

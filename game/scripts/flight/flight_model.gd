@@ -213,16 +213,35 @@ func step(delta: float, cmd: Dictionary) -> void:
 		#
 		# With beta at zero the burn only ever opposes the velocity it can see, and the cap
 		# below means it converges on a stop rather than shooting past it.
+		# BETA COMES OFF THE FORWARD AXIS ALONE, not off total speed.
+		#
+		# Using total speed meant that sliding sideways at 120 m/s and pulling back gave
+		# beta = 0 — pure braking — even though there was no forward speed left to kill. The
+		# burn then fought the lateral thrust the player was still asking for, and the suit
+		# ground down to walking pace on a back-diagonal: "czasami zwalnia do siedmiu
+		# kilometrow na godzine". What "back" means is reverse along the body's own axis, so
+		# that is the only axis whose speed decides whether the burn is a brake or a thrust.
+		var fwd_speed := -bv.z
 		var beta := 0.0 if cmd.get("brake_only", false) else \
-			(1.0 if (bs > 0.05 and bv.z > 0.7 * bs) else 1.0 - clampf((bs - 4.0) / 8.0, 0.0, 1.0))
+			clampf(1.0 - (fwd_speed - 4.0) / 8.0, 0.0, 1.0)
+
+		# And the stopping half must not fight an axis the player is DRIVING. Braking is for
+		# the motion nobody asked for; a commanded slide is not that.
+		var stop_v := bv
+		if absf(cmd.get("lateral", 0.0)) > 0.05:
+			stop_v.x = 0.0
+		if absf(cmd.get("vertical", 0.0)) > 0.05:
+			stop_v.y = 0.0
+		var stop_s := stop_v.length()
+
 		var d := Vector3(0, 0, beta)
-		if bs > 0.05:
-			d += bv * (-(1.0 - beta) / bs)
+		if stop_s > 0.05:
+			d += stop_v * (-(1.0 - beta) / stop_s)
 		if d.length_squared() > 1e-6:
 			d = d.normalized()
 			var want := back * spec.main * BRAKE_K * power
 			# Only the STOPPING part is impulse-capped; the reverse part accelerates freely.
-			var cap := (bs / delta) * spec.mass / maxf(1e-4, 1.0 - beta) if beta < 0.999 else INF
+			var cap := (stop_s / delta) * spec.mass / maxf(1e-4, 1.0 - beta) if beta < 0.999 else INF
 			f += d * minf(want, cap)
 
 	f.x += cmd.get("lateral", 0.0) * spec.lateral * power

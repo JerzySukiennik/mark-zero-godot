@@ -33,10 +33,10 @@ func _sky() -> void:
 	var mat := ProceduralSkyMaterial.new()
 	# A brighter sky is not a mood choice here: it IS the suit's key light, because a sky
 	# this size is the only large source in an empty scene.
-	mat.sky_top_color = Color(0.30, 0.45, 0.68)
-	mat.sky_horizon_color = Color(0.82, 0.86, 0.90)
-	mat.ground_bottom_color = Color(0.20, 0.20, 0.22)
-	mat.ground_horizon_color = Color(0.62, 0.64, 0.66)
+	mat.sky_top_color = Color(0.10, 0.14, 0.22)
+	mat.sky_horizon_color = Color(0.30, 0.34, 0.40)
+	mat.ground_bottom_color = Color(0.05, 0.05, 0.06)
+	mat.ground_horizon_color = Color(0.16, 0.17, 0.19)
 	# THE lever for a metal subject. Measured on the Mark I hovering: 1.25 gave a suit
 	# luminance of 0.195 and 2.60 gives 0.295, which is the difference between a black
 	# silhouette and readable plates and panel lines. Raising the LIGHTS did nothing for
@@ -69,7 +69,7 @@ func _sky() -> void:
 	# island reads as being the same distance away as the next block.
 	env.fog_enabled = true
 	env.fog_density = 0.0009
-	env.fog_light_color = Color(0.55, 0.60, 0.66)
+	env.fog_light_color = Color(0.16, 0.18, 0.22)
 
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -77,7 +77,12 @@ func _sky() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42, -125, 0)
-	sun.light_energy = 1.9
+	# STRONG, now that the world itself is near-black. Directional light is the one lever
+	# that separates the two: the plate's albedo is 0.03 so it barely answers, while the
+	# armour is polished metal and answers hard. That is how the map stays black with white
+	# lines while the suit stops being a silhouette — both of which Jurek has asked for, and
+	# which turning the SKY up could not do at once, because the sky lights everything.
+	sun.light_energy = 2.2
 	sun.light_color = Color(1.0, 0.96, 0.90)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 400.0
@@ -88,7 +93,7 @@ func _sky() -> void:
 	# a metal figure reads as "too dark" even when the key light is strong.
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-18, 55, 0)
-	fill.light_energy = 0.90
+	fill.light_energy = 1.05
 	fill.light_color = Color(0.72, 0.82, 1.0)
 	fill.shadow_enabled = false
 	add_child(fill)

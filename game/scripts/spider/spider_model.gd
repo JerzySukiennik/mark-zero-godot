@@ -33,6 +33,9 @@ var position := Vector3.ZERO
 var velocity := Vector3.ZERO
 var accel := Vector3.ZERO
 var basis_ := Basis.IDENTITY
+## Yaw AND pitch, for the camera. A body that pitches when you look up is a body lying
+## down, so this never reaches the rig.
+var view_basis := Basis.IDENTITY
 var yaw := 0.0
 var pitch := 0.0
 var grounded := false
@@ -76,6 +79,11 @@ func step(delta: float, cmd: Dictionary, rope: Vector3) -> void:
 	_walk(delta, cmd)
 
 	basis_ = Basis.from_euler(Vector3(0, yaw, 0), EULER_ORDER_YXZ)
+	# THE CAMERA PITCHES, THE BODY DOES NOT. `pitch` was being accumulated off the stick and
+	# then used by nothing at all — the basis is yaw-only, so looking up and down moved
+	# exactly one thing in the game, which was the HUD sway. "Nie moge patrzec w gore i w
+	# dol, bo to rusza jakos dziwnie UI" was precisely the whole of its effect.
+	view_basis = Basis.from_euler(Vector3(pitch, yaw, 0), EULER_ORDER_YXZ)
 
 func _resolve_ground() -> void:
 	# Same convention as the armour: the model is a metre above soles that sit on y = 0.
