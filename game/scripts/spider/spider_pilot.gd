@@ -23,6 +23,9 @@ const BODIES := [
 ## pivot's frame is authored so the SIGN is the same on both hands, which is why this is
 ## one number rather than a mirrored pair.
 const THWIP_ANGLE := deg_to_rad(95.0)
+## How far the trigger has to be squeezed to throw a web. Well past the resting slop on a
+## DualShock, and short of the hard stop so it does not need a deliberate clench.
+const TRIGGER_FIRE := 0.35
 const FEET_DROP := 1.0
 const AIM_TIME_SCALE := 0.35
 
@@ -34,6 +37,7 @@ var camera: ChaseCamera
 var visor: Visor
 var health := 1.0
 var legs := SpiderLegs.new()
+var poses := SpiderPoses.new()
 
 ## One per hand. Right is R1, left is L1 — the same hands the armour fires from, so the
 ## two characters do not need separate muscle memory.
@@ -41,6 +45,8 @@ var tether := { "R": WebTether.new(), "L": WebTether.new() }
 var line := { "R": null, "L": null }
 ## Rises while a hand is throwing a web, and drives that arm out towards the anchor.
 var _throw := { "R": 0.0, "L": 0.0 }
+## Trigger edges, so holding fires ONE web rather than one per frame.
+var _held := { "R": false, "L": false }
 
 var _stage: Stage
 var _shoot_t := 0.0
@@ -136,6 +142,8 @@ func _physics_process(delta: float) -> void:
 	}
 	if _stage != null:
 		model.ground_y = _stage.ground_y
+	var was_down := not model.grounded
+	var fell := model.velocity.y
 	model.step(delta, cmd, rope)
 
 	global_position = model.position
@@ -149,6 +157,9 @@ func _physics_process(delta: float) -> void:
 		legs.drive(delta, not model.grounded, skel)
 		skel.update_pose(delta)
 
+	if was_down and model.grounded:
+		poses.land_hard(clampf(-fell / 30.0, 0.0, 1.0))
+
 	_draw_webs()
 
 	if camera != null:
@@ -160,17 +171,27 @@ func _physics_process(delta: float) -> void:
 		visor.hud.repulsor_l = 0.15 if tether["L"].state != WebTether.IDLE else 1.0
 		visor.hud.repulsor_r = 0.15 if tether["R"].state != WebTether.IDLE else 1.0
 
-## Fire, or let go. TAP TO FIRE, TAP AGAIN TO RELEASE — not hold. A held button would mean
-## the player cannot look around or steer with that thumb during the one part of the game
-## where both matter, and a swing lasts several seconds.
+## HELD ON THE TRIGGERS. Jurek: "pod R2 powinna byc prawa siec, a pod L2 lewa siec."
+##
+## Hold and you are on the web; let go and you drop. That is both what every Spider-Man
+## game does and the better fit for an analogue trigger, which has a natural "still holding
+## it" state that a face button does not — and it frees both thumbs for the sticks, which
+## during a swing are steering and looking.
 func _service_web(hand: String, delta: float) -> void:
 	var t: WebTether = tether[hand]
 	_throw[hand] = maxf(0.0, _throw[hand] - delta * 4.0)
 
-	if not Pad.just_pressed("fire_" + hand.to_lower()):
+	# R2 is the right hand, L2 the left.
+	var pull: float = Pad.thrust() if hand == "R" else Pad.retro()
+	var held := pull > TRIGGER_FIRE
+	var was: bool = _held[hand]
+	_held[hand] = held
+
+	if not held:
+		if t.state != WebTether.IDLE:
+			t.release()
 		return
-	if t.state != WebTether.IDLE:
-		t.release()
+	if was or t.state != WebTether.IDLE:
 		return
 
 	# Aim from the CAMERA, not from the hand. The player is pointing with the reticle, and
@@ -242,62 +263,30 @@ func _draw_webs() -> void:
 
 # ---- posing -----------------------------------------------------------------------------
 
-## Kept here rather than in Poses, which is typed against FlightModel and is full of things
-## with no meaning for a man on a rope — thrust, boost, station keeping.
-func _pose(_delta: float) -> void:
-	var hanging: bool = tether["R"].state == WebTether.ATTACHED or tether["L"].state == WebTether.ATTACHED
-	skel.set_pose_weights({
-		"stand": 1.0 if model.grounded and model.ground_speed <= 0.5 else 0.0,
-		"walk": 1.0 if model.grounded and model.ground_speed > 0.5 else 0.0,
-		"cruise": 1.0 if (not model.grounded and hanging) else 0.0,
-		"hover": 1.0 if (not model.grounded and not hanging) else 0.0,
-	})
+## Spider-Man's stances live in SpiderPoses, authored from scratch. He was borrowing the
+## armour's six, which describe an aircraft, so standing still he stood like a suit of
+## armour and hanging off a web he held formation.
+func _pose(delta: float) -> void:
+	poses.update(delta, model, {
+		"R": tether["R"].state == WebTether.ATTACHED,
+		"L": tether["L"].state == WebTether.ATTACHED,
+	}, skel)
 
-	if model.grounded and model.ground_speed > 0.5:
-		var ph := model.stride_phase * TAU
-		var gait := clampf(model.ground_speed / SpiderModel.RUN_SPEED, 0.0, 1.0)
-		var amp := lerpf(0.28, 0.82, gait)
-		var s1 := sin(ph)
-		var s2 := sin(ph + PI)
-		skel.add_offset("piv_hipL", Poses.X_AX, -s1 * amp)
-		skel.add_offset("piv_hipR", Poses.X_AX, -s2 * amp)
-		skel.add_offset("piv_kneeL", Poses.X_AX, maxf(0.0, sin(ph - PI * 0.35)) * amp * 1.6)
-		skel.add_offset("piv_kneeR", Poses.X_AX, maxf(0.0, sin(ph + PI * 0.65)) * amp * 1.6)
-		skel.add_offset("piv_shoulderL", Poses.X_AX, -s2 * amp * 0.6)
-		skel.add_offset("piv_shoulderR", Poses.X_AX, -s1 * amp * 0.6)
-		skel.add_offset("piv_hips", Poses.Y_AX, s1 * amp * 0.24)
-		skel.add_offset("piv_chest", Poses.Y_AX, -s1 * amp * 0.18)
-
-	# THE THROWING ARM. The hand that fired reaches out along the web and the other stays
-	# put, so which hand threw it is readable without looking at the HUD — the same lesson
-	# the armour's fire pose had to learn the hard way.
-	#
-	# The authored web-shooting gesture (two fingers folded to the palm) arrives with the
-	# Iron Spider model; until then this is the arm, not the hand.
+	# THE THROWING ARM, layered on top: the hand that fired reaches along its web, so which
+	# hand threw it is readable without looking at the HUD.
 	for hand: String in ["R", "L"]:
 		var th: float = _throw[hand]
-		var t: WebTether = tether[hand]
-		var hold := 0.55 if t.state == WebTether.ATTACHED else 0.0
-		var reach: float = maxf(th, hold)
-		if reach <= 0.001:
+		if th <= 0.001:
 			continue
 		var side: String = SuitRig.SIDE[hand]
-		skel.add_offset("piv_shoulder" + side, Poses.X_AX, -1.25 * reach)
-		skel.add_offset("piv_elbow" + side, Poses.X_AX, -0.7 * reach)
-		# THE THWIP. Two fingers folded to the palm, and it is one clean rotation because
-		# the model was authored for exactly that. It snaps shut with the throw and relaxes
-		# while the web is held, so a hand carrying a rope is not still mid-gesture.
-		var fold: float = maxf(th, hold * 0.45)
-		skel.add_offset("piv_fingers" + side, Poses.X_AX, THWIP_ANGLE * fold)
+		skel.add_offset("piv_shoulder" + side, SpiderPoses.X_AX, -1.15 * th)
+		skel.add_offset("piv_elbow" + side, SpiderPoses.X_AX, -0.65 * th)
+		# The thwip: two fingers folded to the palm, one clean rotation, authored so the
+		# sign is the same on both hands (assets/suits/ironspider-notes.md).
+		skel.add_offset("piv_fingers" + side, SpiderPoses.X_AX, THWIP_ANGLE * th)
 
-	# Hanging, the legs tuck and trail. A figure on a rope with its legs straight down is a
-	# plumb bob, and reads as one.
-	if hanging:
-		var tuck := clampf(model.speed / 40.0, 0.25, 1.0)
-		skel.add_offset("piv_hipL", Poses.X_AX, 0.5 * tuck)
-		skel.add_offset("piv_hipR", Poses.X_AX, 0.35 * tuck)
-		skel.add_offset("piv_kneeL", Poses.X_AX, 1.1 * tuck)
-		skel.add_offset("piv_kneeR", Poses.X_AX, 0.8 * tuck)
+
+
 
 ## Hands the menu the room's state. Kept on this side of the line so SuitMenu stays
 ## renderable without a running SceneTree.

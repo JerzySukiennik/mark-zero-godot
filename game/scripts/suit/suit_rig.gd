@@ -231,8 +231,14 @@ func _aim_emitter(name: String, dir: Vector3) -> Quaternion:
 
 ## Build the target rotations for one named pose. `_chain` accumulates each pivot's rotation
 ## in suit space, so an `aim` given in the suit's frame can be converted into the parent's.
+## Which table `set_pose` reads. Defaults to the armour's POSES; Spider-Man swaps in his
+## own, because he is not wearing an aircraft and none of the six flight poses describe
+## anything he does. Sharing one table meant he walked around in the Mark III's stance.
+var pose_table: Dictionary = POSES
+
 func set_pose(name: String) -> void:
-	var pose: Dictionary = POSES.get(name, POSES["stand"])
+	var fallback = pose_table.values()[0] if not pose_table.is_empty() else {}
+	var pose: Dictionary = pose_table.get(name, fallback)
 	var chain: Dictionary = {}
 	for p in pivots:
 		var parent_name: String = PIVOT_PARENT.get(p, "")

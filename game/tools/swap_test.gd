@@ -80,6 +80,47 @@ func _ready() -> void:
 		await get_tree().create_timer(0.8).timeout
 		_ok(now.legs.out > 0.9, "the spider legs deploy in the air (%.2f)" % now.legs.out)
 
+	print("=== swinging off the tower ===")
+	if now is SpiderPilot:
+		# The tower is the only thing on the plate to swing from, so a web that cannot
+		# anchor to it is a mechanic with no world to use it on.
+		var tower: Node3D = null
+		for c in arena.stage.get_children():
+			if c.name == "Tower":
+				for g in c.get_children():
+					if g is StaticBody3D:
+						tower = g
+		_ok(tower != null, "there is a tower to web")
+
+		if tower != null:
+			var sp: SpiderPilot = now
+			sp.model.position = Vector3(0, 120, -40)
+			sp.model.velocity = Vector3(0, 0, -30)
+			sp.model.grounded = false
+			var t: WebTether = sp.tether["R"]
+			# Anchored high on the near face, which is what a ray from the player would hit.
+			_ok(t.fire(sp.model.position, tower, Vector3(0, 150, -78)), "a web reaches it")
+			while t.state == WebTether.FLYING:
+				t.step(1.0 / 120.0, sp.model.position, sp.model.velocity, 0.0)
+			_ok(t.state == WebTether.ATTACHED, "and sticks")
+
+			var start_y: float = sp.model.position.y
+			var low := 1e9
+			var rose := false
+			for i in 480:                      # four seconds on the line
+				var rope := t.step(1.0 / 120.0, sp.model.position, sp.model.velocity, 0.0)
+				sp.model.step(1.0 / 120.0, { walk = Vector2.ZERO, look = Vector2.ZERO,
+					jump = false, aiming = false }, rope)
+				low = minf(low, sp.model.position.y)
+				if sp.model.position.y > low + 4.0:
+					rose = true
+			# THE TEST OF A SWING is that it comes back UP. Anything falls; only something
+			# on a rope trades the height for speed and then trades it back.
+			_ok(sp.model.position.y > 5.0, "he does not simply hit the ground (y %.0f)" % sp.model.position.y)
+			_ok(rose, "and the swing carries him back UP after the low point (low %.0f)" % low)
+			_ok(sp.model.position.distance_to(t.anchor_point()) < t.rest_length * 1.3,
+				"staying on the end of the line")
+
 	print("=== and back again, also through the menu ===")
 	var m2: SuitMenu = now.visor.menu
 	m2.open()
