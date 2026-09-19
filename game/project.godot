@@ -32,6 +32,15 @@ window/vsync/vsync_mode=1
 ; of the game while a controller is driving it.
 pointing/emulate_touch_from_mouse=false
 
+[debug]
+
+; Every run leaves a log on disk. Without this the only way to see why a launch failed is
+; to be sitting at the machine when it happens — and the machine that matters here is a
+; laptop in another room. Godot keeps the last few under user://logs.
+file_logging/enable_file_logging=true
+file_logging/log_path="user://logs/mark-zero.log"
+file_logging/max_log_files=5
+
 [physics]
 
 3d/physics_engine="Jolt Physics"

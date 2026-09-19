@@ -11,12 +11,18 @@ var _publish_acc := 0.0
 const PUBLISH_HZ := 20.0
 
 func _ready() -> void:
+	# Printed so a log file can prove the scene actually started, which is the difference
+	# between "it launched and rendered nothing" and "it never launched".
+	print("[mark zero] arena starting — display %s, renderer %s" % [
+		DisplayServer.get_name(), RenderingServer.get_video_adapter_name()])
 	city = City.new()
 	city.name = "City"
 	add_child(city)
 	_sky()
 	Net.peers_changed.connect(_sync_suits)
 	_sync_suits()
+	print("[mark zero] ready — %d suit(s), camera %s" % [
+		suits.size(), "yes" if get_viewport().get_camera_3d() != null else "NONE"])
 
 func _sky() -> void:
 	var env := Environment.new()
