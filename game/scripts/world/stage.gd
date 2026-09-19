@@ -31,6 +31,70 @@ func build() -> void:
 	_built = true
 	_plate()
 	_grid()
+	_tower()
+
+## ONE building. Not a city — the plate is still the point — but Spider-Man cannot swing
+## off nothing, and a web fired into an empty sky is a mechanic with no world to use it on.
+## Jurek: "nie ma zadnych budynkow. Wiec moze dodaj jeden budynek."
+##
+## Tall and close to the spawn, because the whole test is whether you can look at something,
+## hit it, and swing. Hunting for it would be a different game.
+const TOWER_HEIGHT := 180.0
+const TOWER_WIDTH := 34.0
+const TOWER_AT := Vector3(0, 0, -95)
+
+func _tower() -> void:
+	var root := Node3D.new()
+	root.name = "Tower"
+	root.position = TOWER_AT
+	add_child(root)
+
+	var bm := BoxMesh.new()
+	bm.size = Vector3(TOWER_WIDTH, TOWER_HEIGHT, TOWER_WIDTH)
+	var mi := MeshInstance3D.new()
+	mi.mesh = bm
+	mi.position.y = TOWER_HEIGHT * 0.5
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.20, 0.22, 0.26)
+	m.metallic = 0.35
+	m.roughness = 0.42
+	mi.material_override = m
+	root.add_child(mi)
+
+	# Bands up the face. Same reasoning as the grid on the plate: a flat slab gives the eye
+	# nothing to judge height or closing speed against, and swinging is entirely about both.
+	var bands := ImmediateMesh.new()
+	var bmi := MeshInstance3D.new()
+	bmi.mesh = bands
+	var lm := StandardMaterial3D.new()
+	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	lm.albedo_color = Color(0.45, 0.58, 0.72, 0.55)
+	lm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	bmi.material_override = lm
+	bands.surface_begin(Mesh.PRIMITIVE_LINES)
+	var h := TOWER_WIDTH * 0.5 + 0.05
+	var y := 6.0
+	while y < TOWER_HEIGHT:
+		for c: Vector2 in [Vector2(-h, -h), Vector2(h, -h), Vector2(h, h), Vector2(-h, h)]:
+			bands.surface_add_vertex(Vector3(c.x, y, c.y))
+		# Close the ring: four segments need the first corner again at the end.
+		bands.surface_add_vertex(Vector3(-h, y, -h))
+		bands.surface_add_vertex(Vector3(h, y, -h))
+		bands.surface_add_vertex(Vector3(h, y, h))
+		bands.surface_add_vertex(Vector3(-h, y, h))
+		y += 6.0
+	bands.surface_end()
+	root.add_child(bmi)
+
+	var body := StaticBody3D.new()
+	body.name = "TowerBody"
+	var cs := CollisionShape3D.new()
+	var sh := BoxShape3D.new()
+	sh.size = bm.size
+	cs.shape = sh
+	cs.position.y = TOWER_HEIGHT * 0.5
+	body.add_child(cs)
+	root.add_child(body)
 
 func _plate() -> void:
 	var mi := MeshInstance3D.new()

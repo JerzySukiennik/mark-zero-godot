@@ -80,16 +80,77 @@ func attach(rig: SuitRig) -> void:
 		_emitters.append({
 			holder = holder,
 			boot = spec.boot,
+			core = _make_core(holder, scale_f),
+			glow = _make_glow(holder, scale_f),
 			flame = _make_flame(holder, scale_f),
 			fog = _make_fog(holder, scale_f),
 			sparks = _make_sparks(holder, scale_f),
 		})
 
+## THE ARC. A solid tapered cone of light out of the nozzle, redrawn every frame.
+##
+## Particles cannot do this, and that is the lesson from the whole exhaust so far: however
+## you tune them, a cloud of separate sprites reads as SMOKE. What Jurek asked for is the
+## opposite — "mega mocne przy nogach, takie bez przerwy... jak jest spawanie" — a welding
+## arc, which is continuous, has a hard bright core and hurts to look at. That is geometry
+## with additive blending, not a particle system. The particles stay, but they are now the
+## sparks AROUND the arc rather than the thing itself.
+func _make_core(parent: Node3D, s: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	# Emitter axis is the pivot's local -Y, and a CylinderMesh runs along +Y, so it is hung
+	# below the nozzle and tapers as it goes.
+	cm.top_radius = 0.052 * s
+	cm.bottom_radius = 0.012 * s
+	cm.height = 0.95 * s
+	cm.radial_segments = 12
+	cm.rings = 1
+	mi.mesh = cm
+	mi.position.y = -cm.height * 0.5
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# Past white on purpose. Values over one are what the glow pass picks up, and the bloom
+	# is most of what makes it read as too bright to look at rather than as a blue cone.
+	m.albedo_color = Color(2.6, 3.0, 3.4, 0.95)
+	mi.material_override = m
+	parent.add_child(mi)
+	return mi
+
+## The halo around the arc. Wider, much softer, and the part that actually blooms.
+func _make_glow(parent: Node3D, s: float) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.16 * s
+	cm.bottom_radius = 0.05 * s
+	cm.height = 1.5 * s
+	cm.radial_segments = 12
+	cm.rings = 1
+	mi.mesh = cm
+	mi.position.y = -cm.height * 0.5
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.albedo_color = Color(0.55, 0.85, 1.35, 0.32)
+	mi.material_override = m
+	parent.add_child(mi)
+	return mi
+
 ## The plume: a dense stream of small additive particles. Small and many is the whole point.
 func _make_flame(parent: Node3D, s: float) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = 140
-	p.lifetime = 0.26
+	# THE ARC CARRIES THE EXHAUST NOW, and these are a whisper of heat around it. Rendered
+	# side by side, the arc alone is exactly the welding torch Jurek asked for and the
+	# particles were a white cloud swallowing the suit from the waist down. So they keep
+	# their job — hot grit in the blast — and lose the volume.
+	p.amount = 55
+	p.lifetime = 0.15
 	p.explosiveness = 0.0
 	p.fixed_fps = 0
 	p.local_coords = false          # the plume is left behind as the suit moves through it
@@ -97,16 +158,20 @@ func _make_flame(parent: Node3D, s: float) -> GPUParticles3D:
 
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	pm.emission_sphere_radius = 0.045 * s
+	pm.emission_sphere_radius = 0.028 * s
 	pm.direction = Vector3(0, -1, 0)
 	pm.spread = 7.0
-	pm.initial_velocity_min = 9.0 * s
-	pm.initial_velocity_max = 15.0 * s
+	# TIGHT AND SHORT. Never visible until now, so never tuned: at 9-15 m/s over a quarter
+	# second the plume threw itself six metres past the boots and read as a launch vehicle
+	# rather than as a man hovering. Jurek wants it "mega mocne przy nogach" — the intensity
+	# belongs AT the nozzle, and length is what dilutes it.
+	pm.initial_velocity_min = 4.0 * s
+	pm.initial_velocity_max = 6.5 * s
 	pm.gravity = Vector3.ZERO
 	pm.damping_min = 14.0
 	pm.damping_max = 20.0
-	pm.scale_min = 0.16 * s
-	pm.scale_max = 0.30 * s
+	pm.scale_min = 0.085 * s
+	pm.scale_max = 0.155 * s
 	# Grows as it cools and slows, the way a jet spreads once it leaves the nozzle.
 	var curve := Curve.new()
 	curve.add_point(Vector2(0.0, 0.35))
@@ -116,13 +181,13 @@ func _make_flame(parent: Node3D, s: float) -> GPUParticles3D:
 	ct.curve = curve
 	pm.scale_curve = ct
 	pm.color_ramp = _ramp([
-		[0.00, Color(HOT.r, HOT.g, HOT.b, 1.0)],
-		[0.18, Color(1.0, 0.92, 0.70, 0.95)],
-		[0.50, Color(WARM.r, WARM.g, WARM.b, 0.65)],
+		[0.00, Color(HOT.r, HOT.g, HOT.b, 0.42)],
+		[0.18, Color(1.0, 0.92, 0.70, 0.34)],
+		[0.50, Color(WARM.r, WARM.g, WARM.b, 0.20)],
 		[1.00, Color(COOL.r, COOL.g, COOL.b, 0.0)],
 	])
 	p.process_material = pm
-	p.draw_pass_1 = _billboard(0.9)
+	p.draw_pass_1 = _billboard(0.34)
 	parent.add_child(p)
 	return p
 
@@ -132,7 +197,9 @@ func _make_flame(parent: Node3D, s: float) -> GPUParticles3D:
 func _make_fog(parent: Node3D, s: float) -> FogVolume:
 	var f := FogVolume.new()
 	f.shape = RenderingServer.FOG_VOLUME_SHAPE_ELLIPSOID
-	f.size = Vector3(0.55, 1.5, 0.55) * s
+	# Shrunk with the plume: a fog volume a metre and a half tall was most of the soft white
+	# mass swallowing the suit.
+	f.size = Vector3(0.34, 0.70, 0.34) * s
 	f.position = Vector3(0, -0.7 * s, 0)
 	var m := FogMaterial.new()
 	m.density = 0.0                 # driven per frame from the emitter's output
@@ -146,7 +213,7 @@ func _make_fog(parent: Node3D, s: float) -> FogVolume:
 ## amount together with the rest: they are what stops the plume looking like a smooth gas.
 func _make_sparks(parent: Node3D, s: float) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = 26
+	p.amount = 14
 	p.lifetime = 0.5
 	p.local_coords = false
 	var pm := ParticleProcessMaterial.new()
@@ -165,7 +232,7 @@ func _make_sparks(parent: Node3D, s: float) -> GPUParticles3D:
 		[1.0, Color(0.7, 0.12, 0.02, 0.0)],
 	])
 	p.process_material = pm
-	p.draw_pass_1 = _billboard(0.16)
+	p.draw_pass_1 = _billboard(0.055)
 	parent.add_child(p)
 	return p
 
@@ -249,12 +316,28 @@ func drive(delta: float, thrust: float, lateral: float, vertical: float, braking
 		var lv: float = _level[i]
 		var on := lv > 0.02
 
+		# The arc is continuous — it does not pulse on and off, it lengthens and brightens.
+		# Length is scaled rather than alpha alone, because a jet that only fades looks like
+		# a light being dimmed while one that grows looks like a throttle opening.
+		for part: String in ["core", "glow"]:
+			var mi: MeshInstance3D = e[part]
+			mi.visible = lv > 0.02
+			if mi.visible:
+				var stretch: float = 0.45 + lv * 1.25
+				mi.scale = Vector3(0.7 + lv * 0.45, stretch, 0.7 + lv * 0.45)
+				var mat: StandardMaterial3D = mi.material_override
+				var a: Color = mat.albedo_color
+				mat.albedo_color = Color(a.r, a.g, a.b,
+					(0.95 if part == "core" else 0.32) * clampf(lv * 1.2, 0.0, 1.0))
+
 		e.flame.emitting = on
 		e.sparks.emitting = lv > 0.35
 		if on:
 			e.flame.amount_ratio = clampf(lv, 0.15, 1.0)
 			e.flame.speed_scale = 0.8 + lv * 0.6
-		(e.fog.material as FogMaterial).density = lv * 0.55
+		# A trace, not a cloud. At 0.55 the fog volumes were most of the white mass that
+		# buried the legs; they exist to catch the light, not to be seen.
+		(e.fog.material as FogMaterial).density = lv * 0.10
 
 	# The two lights, placed between each pair so a single source covers both.
 	_place_light(0, "piv_thrusterL", "piv_thrusterR", maxf(_level[0], _level[1]))

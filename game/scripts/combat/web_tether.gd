@@ -62,13 +62,17 @@ static func pick(from: Vector3, aim: Vector3, candidates: Array) -> Node3D:
 			best = n
 	return best
 
-func fire(from: Vector3, target: Node3D) -> bool:
+## `at` is the world point the web should stick to. Omitted, it lands just above the
+## target's origin, which is what you want for a suit — the origin is at the soles, and a
+## web stuck to the bottom of the boots puts the rider underneath the exhaust. For a
+## BUILDING there is no such convention and the ray's hit point is the only sensible
+## anchor, so it is passed in.
+func fire(from: Vector3, target: Node3D, at: Vector3 = Vector3.INF) -> bool:
 	if target == null:
 		return false
 	anchor_node = target
-	# Aim a little above the target's origin — the origin is at the soles, and a web stuck
-	# to the bottom of the boots puts the rider underneath the exhaust.
-	anchor_local = target.global_transform.affine_inverse() * (target.global_position + Vector3(0, 1.1, 0))
+	var world: Vector3 = at if at != Vector3.INF else target.global_position + Vector3(0, 1.1, 0)
+	anchor_local = target.global_transform.affine_inverse() * world
 	_fly_dist = maxf(1.0, from.distance_to(anchor_point()))
 	_fly_t = 0.0
 	reach = 0.0

@@ -59,6 +59,11 @@ var pitch := 0.0
 var roll := 0.0
 
 var grounded := false
+## The cosmetic lean into a slide, and the basis the BODY is drawn with. `basis_` stays the
+## physics frame and never sees either: the camera follows `basis_` too, because a camera
+## that rolls with the lean is a camera nobody can play behind.
+var bank := 0.0
+var view_basis := Basis.IDENTITY
 var thrust_mag := 0.0
 var g_force := 1.0
 var boost_active := 0.0
@@ -98,6 +103,15 @@ const TURBULENCE := 1.35
 ## What the exhaust reads as while the suit is simply holding station. Not zero: standing
 ## still in the air is the single most expensive thing a repulsor does.
 const HOVER_BURN := 0.55
+## How much of its own weight the suit carries automatically while the boots are burning.
+##
+## Thrust is a BODY-frame vector along -Z, so flying level put all of it horizontal and
+## nothing at all held the suit up: it sank the whole way across the plate under full
+## power. That is correct for an aeroplane and wrong for this — an armour has four
+## independently vectored repulsors and does not have to point its nose up to stay level.
+## Short of 1.0 on purpose, so a dive still loses height and altitude is still something
+## the player manages.
+const LIFT_ASSIST := 0.98
 ## How far the suit leans into a full sideways slide, in radians. Roughly 35 degrees, which
 ## is a committed bank without being aerobatics.
 const BANK_MAX := 0.62
@@ -115,10 +129,19 @@ const RUN_SPEED := 7.4
 const WALK_GEAR := 0.35          ## deflection at which the walk tops out and the run begins
 const GROUND_ACCEL := 22.0
 const GROUND_FRICTION := 16.0
-## Metres of ground covered per complete two-step cycle. The stride phase is advanced by
-## DISTANCE, never by time, which is the only thing that keeps the feet from skating: at
-## half speed the legs swing half as often on their own, with nothing to synchronise.
-const STRIDE := 1.75
+## Metres of ground covered per complete two-step cycle, walking and flat out.
+##
+## The phase is advanced by DISTANCE, never by time, which is what keeps the feet from
+## skating. But a FIXED stride length makes cadence rise linearly with speed, and 1.75 m
+## flat meant four full leg cycles a second at a run — a blur, not a run. Real legs take
+## LONGER steps as they speed up, roughly doubling the stride between a walk and a sprint,
+## so cadence only rises from about one cycle a second to two.
+const STRIDE_WALK := 1.45
+const STRIDE_RUN := 3.60
+
+## The stride length in use at `speed`.
+static func stride_len(speed: float, top: float) -> float:
+	return lerpf(STRIDE_WALK, STRIDE_RUN, clampf(speed / maxf(0.01, top), 0.0, 1.0))
 
 ## Horizontal speed while on foot, and the walk-cycle phase in whole cycles. Both are read
 ## by Poses; neither means anything in the air.
@@ -252,6 +275,14 @@ func step(delta: float, cmd: Dictionary) -> void:
 	# ---- station keeping, while hovering -------------------------------------------------
 	f += _hover(delta, cmd)
 
+	# ---- altitude assist, while under power ----------------------------------------------
+	# Applied in WORLD up rather than body up, which is the whole point: banked thirty-five
+	# degrees into a turn, a body-frame lift loses a chunk of its vertical component and the
+	# suit mushes towards the ground exactly when the player is concentrating on the turn.
+	if not grounded and not hover_active and thrust_mag > 0.12:
+		var carry := clampf(thrust_mag / 0.6, 0.0, 1.0) * LIFT_ASSIST
+		f += basis_.inverse() * Vector3(0, G * spec.mass * carry, 0)
+
 	# ---- integrate ----------------------------------------------------------------------
 	var world_f := basis_ * f
 	world_f.y -= G * spec.mass
@@ -299,7 +330,7 @@ func _walk(delta: float, cmd: Dictionary) -> void:
 	velocity.z = v.z
 
 	ground_speed = v.length()
-	stride_phase += ground_speed * delta / STRIDE
+	stride_phase += ground_speed * delta / stride_len(ground_speed, RUN_SPEED)
 
 	# A suit stood on its feet stands UP. Pitch and roll survive from whatever attitude it
 	# landed in, and without this it walks around the plate leaning forty degrees over.
@@ -399,22 +430,24 @@ func _rotate(delta: float, cmd: Dictionary) -> void:
 	pitch = clampf(pitch - look.y * spec.max_rate * falloff, -1.45, 1.45)
 	roll += cmd.get("roll", 0.0) * spec.roll_rate * delta
 
-	# BANK INTO IT. Sliding sideways with the body dead level is the single thing that made
-	# lateral flight read as levitation rather than flying — Jurek: "po prostu lewituje w
-	# bok". A suit that wants to go right leans right, and the lean is most of what the eye
-	# uses to tell moving from being moved.
+	# Auto-level, weak on purpose: strong enough that the horizon comes back on its own,
+	# weak enough that a deliberate roll holds.
+	roll = lerpf(roll, 0.0, 1.0 - exp(-delta * spec.stability * 1.6))
+	basis_ = Basis.from_euler(Vector3(pitch, yaw, roll), EULER_ORDER_YXZ)
+
+	# BANK INTO IT — but as a LOOK, kept out of `basis_` entirely.
 	#
-	# It builds with airspeed: banking while stationary is a pose, banking through a fast
-	# slide is a turn.
+	# Sliding sideways with the body dead level was what made lateral flight read as
+	# levitation. Rolling the flight basis fixed the look and broke the flying: every force
+	# here is body-frame, so a cosmetic lean tipped the lateral thrust, the lift and above
+	# all the VERTICAL DRAG, which then fought a body-frame velocity that existed only
+	# because of the lean. Banked cruise flew itself into the plate — four hundred metres in
+	# ten seconds. A bank the player can see but the physics cannot is the whole answer: it
+	# is a pose, so it belongs to the pose.
 	var slide: float = clampf(cmd.get("lateral", 0.0), -1.0, 1.0)
 	var authority := clampf(speed / 45.0, 0.25, 1.0)
-	var want_roll := -slide * BANK_MAX * authority
-
-	# Auto-level towards the WANTED bank rather than towards flat. Weak on purpose: strong
-	# enough that the horizon comes back on its own when the stick is centred, weak enough
-	# that a deliberate roll still holds.
-	roll = lerpf(roll, want_roll, 1.0 - exp(-delta * spec.stability * 1.6))
-	basis_ = Basis.from_euler(Vector3(pitch, yaw, roll), EULER_ORDER_YXZ)
+	bank = lerpf(bank, -slide * BANK_MAX * authority, 1.0 - exp(-delta * spec.stability * 1.6))
+	view_basis = Basis.from_euler(Vector3(pitch, yaw, roll + bank), EULER_ORDER_YXZ)
 
 func _air_density(alt: float) -> float:
 	return maxf(0.14, exp(-maxf(0.0, alt) / 8500.0))

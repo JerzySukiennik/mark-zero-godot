@@ -20,7 +20,14 @@ const WALK_GEAR := 0.35
 const GROUND_ACCEL := 34.0
 const GROUND_FRICTION := 22.0
 const JUMP := 9.4
-const STRIDE := 1.55
+## Same rule as the armour: the stride LENGTHENS with speed, so cadence stays human. At a
+## flat 1.55 m he ran at six leg cycles a second, which is what Jurek saw as "mega szybkie
+## cos sie dzieje dziwnego" — the legs were a blur and the pelvis twist went with them.
+const STRIDE_WALK := 1.35
+const STRIDE_RUN := 3.90
+
+static func stride_len(speed: float, top: float) -> float:
+	return lerpf(STRIDE_WALK, STRIDE_RUN, clampf(speed / maxf(0.01, top), 0.0, 1.0))
 
 var position := Vector3.ZERO
 var velocity := Vector3.ZERO
@@ -108,4 +115,4 @@ func _walk(delta: float, cmd: Dictionary) -> void:
 	velocity.z = v.z
 	ground_speed = v.length()
 	# Distance, not time — the same rule the armour's walk follows, for the same reason.
-	stride_phase += ground_speed * delta / STRIDE
+	stride_phase += ground_speed * delta / stride_len(ground_speed, RUN_SPEED)

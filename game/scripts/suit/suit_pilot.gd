@@ -72,8 +72,16 @@ func setup(id: int, armor: String, stage: Stage) -> void:
 func _ready() -> void:
 	model = FlightModel.new()
 	model.set_armor(armor_id)
-	_load_rig(armor_id)
 	poses = Poses.new()
+
+	# EVERYTHING THAT BOLTS ONTO THE RIG IS BUILT FIRST.
+	#
+	# _load_rig ends by attaching the exhaust, the turret and the laser to the new skeleton,
+	# and each of those calls is guarded with `if x != null`. Loading the rig BEFORE they
+	# existed meant all three guards were false and every one of them silently did nothing —
+	# and nothing ever attached them afterwards. The suit has had NO exhaust at all since
+	# the port: `_emitters` was empty, measured, which is why no amount of tuning the flame
+	# ever made a repulsor appear. "Nie widac w ogole tych repulsorow" was exactly right.
 	fx = Thrusters.new()
 	add_child(fx)
 	# Bolts live in the WORLD, not on the suit: one parented to the armour would fly along
@@ -86,6 +94,9 @@ func _ready() -> void:
 	add_child(turret)
 	laser = WristLaser.new()
 	add_child(laser)
+
+	# Now the rig, with somewhere for all of it to attach.
+	_load_rig(armor_id)
 	# The trail is parented to the WORLD, not the suit: puffs must stay where they were made.
 	trail = Contrail.new()
 	get_parent().call_deferred("add_child", trail)
@@ -174,7 +185,7 @@ func _step_local(delta: float) -> void:
 			global_position = model.position
 			if rig != null:
 				rig.position = Vector3(0, -FEET_DROP, 0)
-				rig.basis = model.basis_
+				rig.basis = model.view_basis
 			if skel != null:
 				poses.update(delta, model, hold, skel)
 				skel.update_pose(delta)
@@ -252,7 +263,7 @@ func _step_local(delta: float) -> void:
 	global_position = model.position
 	if rig != null:
 		rig.position = Vector3(0, -FEET_DROP, 0)
-		rig.basis = model.basis_
+		rig.basis = model.view_basis
 	# Firing happens before the pose is solved, so a shot and the arm that threw it land on
 	# the SAME frame. Solving first meant the recoil was always one frame stale.
 	_shoot(aiming)

@@ -69,10 +69,19 @@ func _initialize() -> void:
 	var walk_cycles := m.stride_phase - p0
 	var walk_dist := m.position.distance_to(d0)
 
-	_ok(absf(run_cycles - run_dist / FlightModel.STRIDE) < 0.05,
-		"running: %.2f cycles for %.1f m, one per %.2f m" % [run_cycles, run_dist, FlightModel.STRIDE])
-	_ok(absf(walk_cycles / maxf(0.01, walk_dist) - run_cycles / maxf(0.01, run_dist)) < 0.02,
-		"walking costs the SAME strides per metre — the feet are not skating")
+	# CADENCE, not strides per metre. The stride LENGTHENS with speed, exactly as real legs
+	# do, so strides per metre is supposed to differ between a walk and a run — what must
+	# stay human is how often the legs actually swing. A fixed stride length gave four
+	# cycles a second at a run, which reads as a blur rather than as running.
+	var run_hz := run_cycles / 2.0
+	var walk_hz := walk_cycles / 4.0
+	_ok(run_hz > 1.4 and run_hz < 2.6, "running cadence is human (%.2f cycles/s)" % run_hz)
+	_ok(walk_hz > 0.6 and walk_hz < 1.5, "so is walking (%.2f cycles/s)" % walk_hz)
+	_ok(run_hz > walk_hz, "and a run cycles faster than a walk")
+	# The anti-skate rule still holds: phase comes from distance, so a given stretch of
+	# ground at a given speed always costs the same number of strides.
+	_ok(absf(run_cycles - run_dist / FlightModel.stride_len(FlightModel.RUN_SPEED, FlightModel.RUN_SPEED)) < 0.1,
+		"and the phase still comes from distance (%.2f cycles for %.1f m)" % [run_cycles, run_dist])
 
 	# ---- letting go stops it ------------------------------------------------------------
 	_run(m, poses, skel, Vector2.ZERO, 1.5)

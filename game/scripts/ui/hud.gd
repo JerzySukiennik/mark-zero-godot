@@ -36,6 +36,11 @@ var turret := 1.0
 var _turret_show := 0.0           ## seconds left on the turret bar
 var _sway := Vector2.ZERO
 var _armor_name := "MARK I"
+## What the right-hand panel counts. The HUD is worn by Spider-Man too, and telling him his
+## REPULSORS are at full while he has none is worse than telling him nothing — it was still
+## reading "MARK I / INTEGRITY / REPULSORS" through the Iron Spider's eyes.
+var ammo_label := "REPULSORS"
+var ammo_rows := ["L", "R"]
 var _speed := 0.0
 var _mach := 0.0
 var _aiming := 0.0
@@ -86,11 +91,11 @@ func _draw() -> void:
 	# ---- top right: what you can shoot with ----------------------------------------
 	var rx := s.x - 340.0 * u
 	_panel(Rect2(o + Vector2(rx, 30 * u), Vector2(300 * u, (84 + (30.0 if _turret_show > 0.0 else 0.0)) * u)))
-	_label(o + Vector2(rx + 16 * u, 54 * u), "REPULSORS", Color(0.6, 0.72, 0.8), int(12 * u))
+	_label(o + Vector2(rx + 16 * u, 54 * u), ammo_label, Color(0.6, 0.72, 0.8), int(12 * u))
 	# One bar per hand, because they are fired by different buttons and drain separately.
-	_label(o + Vector2(rx + 16 * u, 76 * u), "L", CYAN, int(13 * u))
+	_label(o + Vector2(rx + 16 * u, 76 * u), ammo_rows[0], CYAN, int(13 * u))
 	_bar(Rect2(o + Vector2(rx + 34 * u, 66 * u), Vector2(248 * u, 11 * u)), repulsor_l, CYAN)
-	_label(o + Vector2(rx + 16 * u, 98 * u), "R", CYAN, int(13 * u))
+	_label(o + Vector2(rx + 16 * u, 98 * u), ammo_rows[1], CYAN, int(13 * u))
 	_bar(Rect2(o + Vector2(rx + 34 * u, 88 * u), Vector2(248 * u, 11 * u)), repulsor_r, CYAN)
 	if _turret_show > 0.0:
 		# The turret bar is not always on screen: a readout that is always there is

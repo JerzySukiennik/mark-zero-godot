@@ -75,11 +75,11 @@ func _process(_d: float) -> bool:
 		b.step(1.0 / 120.0, { thrust = 0.6, retro = 0.0, lateral = 1.0, vertical = 0.0,
 			walk = Vector2.ZERO, look = Vector2.ZERO, roll = 0.0, boost = false,
 			aiming = false, firing = false })
-	var up := b.basis_ * Vector3.UP
+	var up := b.view_basis * Vector3.UP
 	var side := b.basis_.inverse() * b.velocity
 	_ok(side.x > 3.0, "stick RIGHT actually moves it right (%.1f m/s)" % side.x)
 	_ok(up.x > 0.15, "and the suit LEANS that way (up.x %.2f)" % up.x)
-	_ok(absf(b.roll) > 0.2, "a real bank angle, not a token one (%.1f deg)" % rad_to_deg(b.roll))
+	_ok(absf(b.bank) > 0.2, "a real bank angle, not a token one (%.1f deg)" % rad_to_deg(b.bank))
 
 	print("=== standing in the air ===")
 	# The hover pose was a crouch. "Powinien stac z rekami i nogami prosto w dol."

@@ -107,5 +107,22 @@ func _initialize() -> void:
 		_run(n, _cmd({ thrust = 1.0 }), 3.0)
 		_ok(n.speed > 5.0, "%s accelerates (%.0f m/s in 3 s)" % [n.spec.name, n.speed])
 
+	print("=== holding altitude under power ===")
+	# Thrust is a BODY-frame vector along -Z, so flying level put all of it horizontal and
+	# nothing held the suit up — it sank across the whole plate under full power, and it
+	# sank hardest banked into a turn, when a body-frame lift loses its vertical component.
+	for bank: String in ["level", "banked"]:
+		var a := FlightModel.new()
+		a.set_armor("mk3")
+		a.position = Vector3(0, 400, 0)
+		var lat := 0.0 if bank == "level" else 1.0
+		for i in 1200:                                   # ten seconds of cruising
+			a.step(STEP, { thrust = 0.8, retro = 0.0, lateral = lat, vertical = 0.0,
+				walk = Vector2.ZERO, look = Vector2.ZERO, roll = 0.0, boost = false,
+				aiming = false, firing = false })
+		var drop := 400.0 - a.position.y
+		_ok(drop < 25.0, "flying %s for 10 s loses little height (%.0f m)" % [bank, drop])
+		_ok(a.speed > 40.0, "and it is actually flying (%.0f m/s)" % a.speed)
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	quit(1 if bad > 0 else 0)

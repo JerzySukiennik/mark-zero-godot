@@ -63,6 +63,23 @@ func _ready() -> void:
 		_ok(now.rig != null, "he has a body")
 		_ok(now.skel != null and now.skel.has_pivot("piv_palmL"), "and a rig with hands")
 
+	if now is SpiderPilot:
+		# He is not wearing an armour and the panels must not claim he is: it still read
+		# "MARK I / INTEGRITY / REPULSORS" through the Iron Spider's eyes.
+		_ok(now.visor != null and now.visor.hud != null, "Spider-Man has a visor")
+		_ok(now.visor.hud._armor_name == "IRON SPIDER",
+			"and it names him correctly (%s)" % now.visor.hud._armor_name)
+		_ok(now.visor.hud.ammo_label == "WEB FLUID",
+			"and counts web fluid, not repulsors (%s)" % now.visor.hud.ammo_label)
+		# And he can reach the menu at all, which is the only way back to Iron Man.
+		_ok(now.visor.menu != null and now.visor.menu.hero_chosen.get_connections().size() > 0,
+			"and his menu is wired up")
+		# The four back legs must come out when he leaves the ground.
+		now.model.position = Vector3(0, 40, 0)
+		now.model.grounded = false
+		await get_tree().create_timer(0.8).timeout
+		_ok(now.legs.out > 0.9, "the spider legs deploy in the air (%.2f)" % now.legs.out)
+
 	print("=== and back again, also through the menu ===")
 	var m2: SuitMenu = now.visor.menu
 	m2.open()

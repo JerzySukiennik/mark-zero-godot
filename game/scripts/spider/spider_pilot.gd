@@ -76,6 +76,10 @@ func _ready() -> void:
 		visor.menu.hero_chosen.connect(func(id: String): Net.announce_hero(id))
 		visor.menu.opened.connect(func(): _feed_roster())
 		_feed_roster()
+		# He is not wearing an armour, so the panels must not claim he is.
+		visor.hud.set_armor_name("IRON SPIDER")
+		visor.hud.ammo_label = "WEB FLUID"
+		visor.hud.ammo_rows = ["L", "R"]
 
 func _load_body() -> void:
 	for path: String in BODIES:
@@ -101,9 +105,15 @@ func _physics_process(delta: float) -> void:
 	var aiming := Pad.retro() > 0.25
 	Engine.time_scale = AIM_TIME_SCALE if aiming else 1.0
 
-	if visor != null and visor.menu != null and visor.menu.is_open:
-		visor.menu.step(delta)
-		return
+	# THE MENU. Spider-Man simply had no branch for it — the touchpad did nothing at all
+	# once you were wearing the Iron Spider, which also meant no way back to Iron Man.
+	if visor != null and visor.menu != null:
+		if visor.menu.is_open:
+			visor.menu.step(delta)
+			return
+		elif Pad.just_pressed("menu"):
+			visor.menu.open()
+			return
 
 	# Reeling is on the d-pad rather than the stick, because the stick is already steering
 	# the swing and hauling yourself in is something you do DURING one.
@@ -145,6 +155,10 @@ func _physics_process(delta: float) -> void:
 		camera.follow(delta, model.position, model.basis_, model.speed, aiming, 120.0)
 	if visor != null and visor.hud != null:
 		visor.hud.feed(delta / maxf(0.05, Engine.time_scale), look, model.speed, health, aiming)
+		# A hand holding a web reads as spent; a free hand reads as loaded. Crude, and it is
+		# the only thing on that panel that means anything to him.
+		visor.hud.repulsor_l = 0.15 if tether["L"].state != WebTether.IDLE else 1.0
+		visor.hud.repulsor_r = 0.15 if tether["R"].state != WebTether.IDLE else 1.0
 
 ## Fire, or let go. TAP TO FIRE, TAP AGAIN TO RELEASE — not hold. A held button would mean
 ## the player cannot look around or steer with that thumb during the one part of the game
@@ -165,8 +179,27 @@ func _service_web(hand: String, delta: float) -> void:
 	var from := _hand_point(hand)
 	var eye := camera.global_position if camera != null else from
 	var aim := -camera.global_transform.basis.z if camera != null else -model.basis_.z
+	# A SUIT FIRST, THEN THE WORLD.
+	#
+	# The cone test is for moving targets, where a ray through one instant would almost
+	# always miss. Buildings do not move and are enormous, so for those a ray is both
+	# simpler and more honest — it sticks the web exactly where the player was pointing
+	# rather than at some node's origin inside the wall.
 	var target := WebTether.pick(eye, aim, _targets())
-	if target != null and t.fire(from, target):
+	var hit_at := Vector3.INF
+	if target == null:
+		var space := get_world_3d().direct_space_state
+		var q := PhysicsRayQueryParameters3D.create(eye, eye + aim * WebTether.MAX_RANGE)
+		q.collide_with_areas = false
+		var hit := space.intersect_ray(q)
+		if not hit.is_empty() and hit.collider is Node3D:
+			# The plate is not something to swing from — a web stuck to the floor is a
+			# tripwire. Anything meaningfully above the ground is fair.
+			if (hit.position as Vector3).y > (_stage.ground_y + 3.0 if _stage != null else 3.0):
+				target = hit.collider
+				hit_at = hit.position
+
+	if target != null and t.fire(from, target, hit_at):
 		_throw[hand] = 1.0
 		Rumble.landing(0.25)
 

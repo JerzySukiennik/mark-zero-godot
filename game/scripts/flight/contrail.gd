@@ -20,7 +20,12 @@ extends Node3D
 ## three metres apart the puffs were far enough to be read one at a time, and once they had
 ## also grown to four metres across the gaps closed into a bank of cloud instead.
 const SPACING := 1.2
-const MIN_SPEED := 14.0          ## below this it is exhaust pooling, not a trail
+## Below this there is no trail at all. Raised a long way: Jurek does not want a smoke
+## trail behind the suit — "one nie powinny byc smokiem" — he wants the exhaust itself to
+## be strong and continuous at the boots, which is now the arc in Thrusters. So this is a
+## high-speed VAPOUR trail, the thing a fast aircraft leaves, and at anything less than
+## genuinely quick it simply is not there.
+const MIN_SPEED := 90.0
 
 var _smoke: GPUParticles3D
 var _vapour: MeshInstance3D
@@ -40,7 +45,7 @@ func _make_smoke() -> GPUParticles3D:
 	p.amount = 900
 	# Short. The old seven seconds meant a suit at speed dragged half a kilometre of smoke
 	# behind it, and the far end had spread so wide it was weather rather than a trail.
-	p.lifetime = 2.4
+	p.lifetime = 1.6
 	p.local_coords = false          # puffs stay where they were made, not glued to the suit
 	p.emitting = false
 	p.one_shot = false
@@ -82,8 +87,8 @@ func _make_smoke() -> GPUParticles3D:
 	# rather than in a bright knot around it.
 	pm.color_ramp = Thrusters._ramp([
 		[0.00, Color(0.94, 0.97, 1.0, 0.0)],
-		[0.06, Color(1.0, 1.0, 1.0, 0.50)],
-		[0.45, Color(0.90, 0.94, 1.0, 0.26)],
+		[0.06, Color(1.0, 1.0, 1.0, 0.22)],
+		[0.45, Color(0.90, 0.94, 1.0, 0.10)],
 		[1.00, Color(0.86, 0.90, 1.0, 0.0)],
 	])
 	p.process_material = pm
