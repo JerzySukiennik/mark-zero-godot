@@ -15,7 +15,9 @@ const POOL := 14
 ## the only record the plate keeps of anything you have done.
 const SPLAT_LIFE := 22.0
 const SPLAT_POOL := 24
-const COOLDOWN := 0.22
+## Fast enough to mash. Webbing a wall is meant to feel like flicking your wrist, not like
+## working a bolt action.
+const COOLDOWN := 0.13
 
 class Glob:
 	var node: MeshInstance3D

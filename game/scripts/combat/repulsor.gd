@@ -22,7 +22,9 @@ extends Node3D
 const SPEED := 260.0
 const LIFE := 2.4
 const POOL := 24
-const COOLDOWN := 0.14          ## per hand, so alternating hands doubles the rate
+## Per hand, so alternating hands doubles the rate. Tightened, because the whole design of
+## these is "tap as fast as you can" and 0.14 caps a single hand at seven a second.
+const COOLDOWN := 0.095
 const RECOIL := 2.4             ## m/s of push-back per shot
 ## SIXTEEN SHOTS A HAND, counted rather than measured.
 ##

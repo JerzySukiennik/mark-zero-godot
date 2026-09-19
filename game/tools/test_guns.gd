@@ -98,5 +98,34 @@ func _initialize() -> void:
 	mag._cool["R"] = 0.0
 	_ok(mag.ready_to_fire("R"), "and it stayed usable the whole time")
 
+	print("=== mashing ===")
+	# The repulsors are designed to be tapped as fast as the player can manage. A press that
+	# arrived during the cooldown used to be DROPPED, so mashing above the fire rate lost
+	# most of the taps and the button read as unresponsive. What matters is that a hand
+	# fires at its cooldown rate under a faster stream of presses, rather than at the rate
+	# the presses happen to line up with it.
+	var mash := Repulsors.new()
+	root.add_child(mash)
+	mash.build()
+	var shots_out := 0
+	var seconds := 1.0
+	# Twenty presses a second against a hand that can take about ten.
+	var steps := int(seconds / STEP)
+	var since := 0.0
+	for i in steps:
+		since += STEP
+		var pressed := since >= 0.05
+		if pressed:
+			since = 0.0
+		if pressed and mash.ready_to_fire("R"):
+			mash.fire("R", Vector3.ZERO, Vector3(0, 0, -50))
+			shots_out += 1
+		mash._physics_process(STEP)
+	var expected := int(seconds / Repulsors.COOLDOWN)
+	_ok(shots_out >= expected - 2,
+		"a second of mashing gets close to the fire rate (%d of a possible %d)" % [shots_out, expected])
+	_ok(Repulsors.COOLDOWN <= 0.1, "and the rate is fast enough to be worth mashing (%.0f/s)"
+		% (1.0 / Repulsors.COOLDOWN))
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	quit(1 if bad > 0 else 0)

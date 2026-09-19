@@ -26,6 +26,8 @@ const THWIP_ANGLE := deg_to_rad(95.0)
 ## How far the trigger has to be squeezed to throw a web. Well past the resting slop on a
 ## DualShock, and short of the hard stop so it does not need a deliberate clench.
 const TRIGGER_FIRE := 0.35
+## How long a bumper press is remembered while that hand is still reloading.
+const FIRE_BUFFER := 0.22
 ## Mid-air hops, and what each one is worth.
 const MAX_HOPS := 2
 const HOP_UP := 7.5
@@ -66,6 +68,7 @@ var line := { "R": null, "L": null }
 var _throw := { "R": 0.0, "L": 0.0 }
 ## Trigger edges, so holding fires ONE web rather than one per frame.
 var _held := { "R": false, "L": false }
+var _buffer := { "R": 0.0, "L": 0.0 }
 var _hops := MAX_HOPS
 ## Webs that landed this frame and still owe the player their pull into the arc.
 var _catch_pending := { "R": false, "L": false }
@@ -159,10 +162,17 @@ func _physics_process(delta: float) -> void:
 	# zostawiac". Bumpers throw, triggers hold — and keeping the two apart is what lets
 	# each mean one thing.
 	for hand: String in ["R", "L"]:
-		if not Pad.just_pressed("fire_" + hand.to_lower()):
+		# Buffered the same way the armour's repulsors are: a press during the cooldown is
+		# remembered rather than dropped, so mashing throws as fast as the hand can reload
+		# instead of silently swallowing most of the taps.
+		_buffer[hand] = maxf(0.0, _buffer[hand] - delta)
+		if Pad.just_pressed("fire_" + hand.to_lower()):
+			_buffer[hand] = FIRE_BUFFER
+		if _buffer[hand] <= 0.0:
 			continue
 		if shots == null or not shots.ready_to_fire(hand):
 			continue
+		_buffer[hand] = 0.0
 		var wrist := _web_point(hand)
 		var aim := -camera.global_transform.basis.z if camera != null else model.basis_ * Vector3(0, 0, -1)
 		if shots.fire(hand, wrist, aim):

@@ -54,11 +54,14 @@ var _net_basis := Basis.IDENTITY
 ## This is the ONLY thing that tells the two arms apart while shooting: the authored "fire"
 ## pose is deliberately symmetric, so that pressing R1 cannot animate the left arm.
 var _recoil := { "R": 0.0, "L": 0.0 }
+var _buffer := { "R": 0.0, "L": 0.0 }
 ## How far the firing arm reaches past the shared stance, in radians.
 const SHOT_REACH := 0.42
 ## The snap back through the shoulder. Cubed, so it is violent for two frames and then gone.
 const SHOT_KICK := 0.30
 const SHOT_DECAY := 5.0
+## How long a press is remembered while the repulsor is still cooling.
+const FIRE_BUFFER := 0.22
 var _net_thrust := 0.0
 
 var is_mine: bool:
@@ -266,7 +269,7 @@ func _step_local(delta: float) -> void:
 		rig.basis = model.view_basis
 	# Firing happens before the pose is solved, so a shot and the arm that threw it land on
 	# the SAME frame. Solving first meant the recoil was always one frame stale.
-	_shoot(aiming)
+	_shoot(aiming, delta)
 	_turret(delta)
 	_laser(delta)
 
@@ -352,12 +355,23 @@ func _drive_shot_arms(delta: float) -> void:
 ## and L1 as fast as you can and each tap is a shot. So these are just-pressed edges rather
 ## than held state — holding does nothing, which is deliberate. A held trigger is a machine
 ## gun; a tapped one is a fight you are participating in.
-func _shoot(aiming: bool) -> void:
+func _shoot(aiming: bool, delta: float) -> void:
 	if guns == null or skel == null:
 		return
 	for hand: String in ["R", "L"]:
-		if not Pad.just_pressed("fire_" + hand.to_lower()):
+		# BUFFERED, NOT DROPPED. A press that lands during the cooldown used to be thrown
+		# away, so mashing faster than seven taps a second simply lost most of them — and
+		# these are meant to be mashed. Remembering the press for a moment and firing it
+		# the instant the barrel clears turns "the button ignored me" into "it went as soon
+		# as it could", which is the whole difference. Jurek: "nie da sie rapid-strzelac".
+		_buffer[hand] = maxf(0.0, _buffer[hand] - delta)
+		if Pad.just_pressed("fire_" + hand.to_lower()):
+			_buffer[hand] = FIRE_BUFFER
+		if _buffer[hand] <= 0.0:
 			continue
+		if not guns.ready_to_fire(hand):
+			continue
+		_buffer[hand] = 0.0
 		# SuitRig.SIDE, not `hand`: the models name their sides from the opposite
 		# convention to the one the game flies in, so piv_palmL is the hand on the RIGHT of
 		# the screen. Measured in tools/test_sides.gd through the real camera.
