@@ -38,6 +38,8 @@ var skel: SuitRig                          ## the pose machinery, indexed off `r
 var poses: Poses
 var fx: Thrusters
 var guns: Repulsors
+var turret: ShoulderTurret
+var laser: WristLaser
 var trail: Contrail
 var camera: ChaseCamera
 var visor: Visor
@@ -69,6 +71,12 @@ func _ready() -> void:
 	# with it, which is a laser pointer rather than a projectile.
 	guns = Repulsors.new()
 	get_parent().call_deferred("add_child", guns)
+	# Both of these own geometry bolted to the rig, so they live on the SUIT — but their
+	# projectiles are world objects, handled inside each.
+	turret = ShoulderTurret.new()
+	add_child(turret)
+	laser = WristLaser.new()
+	add_child(laser)
 	# The trail is parented to the WORLD, not the suit: puffs must stay where they were made.
 	trail = Contrail.new()
 	get_parent().call_deferred("add_child", trail)
@@ -104,6 +112,10 @@ func _load_rig(id: String) -> void:
 	# armour loads, and a plume left on a discarded rig never appears again.
 	if fx != null:
 		fx.attach(skel)
+	if turret != null:
+		turret.attach(skel)
+	if laser != null:
+		laser.attach(skel)
 	if visor != null and visor.hud != null:
 		visor.hud.set_armor_name(SuitSpecs.get_spec(id).name)
 
@@ -218,6 +230,8 @@ func _step_local(delta: float) -> void:
 			model.speed, model.speed / 343.0, model.basis_)
 
 	_shoot(aiming)
+	_turret(delta)
+	_laser(delta)
 
 	Rumble.set_flight(model.thrust_mag, model.g_force)
 	if was_flying and model.grounded:
@@ -236,6 +250,8 @@ func _step_local(delta: float) -> void:
 		if guns != null:
 			visor.hud.repulsor_l = guns.charge["L"]
 			visor.hud.repulsor_r = guns.charge["R"]
+		if turret != null:
+			visor.hud.turret = turret.charge
 
 ## RAPID-PRESS, NOT HOLD. Jurek's rule, from Marvel's Spider-Man: while aiming you tap R1
 ## and L1 as fast as you can and each tap is a shot. So these are just-pressed edges rather
@@ -260,6 +276,46 @@ func _shoot(aiming: bool) -> void:
 			if visor != null and visor.hud != null:
 				visor.hud.repulsor_l = guns.charge["L"]
 				visor.hud.repulsor_r = guns.charge["R"]
+
+## SQUARE HOLDS THE TURRET OUT. Unlike the palms this is a sustained weapon: holding keeps
+## it deployed and firing, letting go leaves it out for a few seconds and then it folds
+## itself away. The third of a second it takes to deploy is a real cost — you cannot
+## snap-shoot with it — and paying that is what makes it machinery rather than a hotkey.
+func _turret(delta: float) -> void:
+	if turret == null:
+		return
+	var held := Pad.pressed("turret")
+	turret.request(held)
+	if held and turret.ready_to_fire():
+		var muzzle := global_position
+		var kick := turret.fire(Repulsors.aim_point(camera, muzzle))
+		if kick != Vector3.ZERO:
+			model.velocity += kick
+			if visor != null and visor.hud != null:
+				visor.hud.turret = turret.charge
+				visor.hud.flash_turret()
+
+## TRIANGLE AND CIRCLE TOGETHER, and only on a charged suit. The move owns the body for its
+## whole duration: the suit turns and carries the beam through whatever is in front of it,
+## which is the difference between a cutting laser and a gun. Two different turns, because
+## in the air there is nothing to push against and the airframe rolls about its own axis,
+## while on the ground it pivots about the feet.
+func _laser(delta: float) -> void:
+	if laser == null:
+		return
+	laser.trickle(delta)
+	if not laser.active:
+		if Pad.pressed("interact") and Pad.pressed("suit_toggle") and laser.ready_to_fire:
+			laser.start(not model.grounded)
+		return
+	var step := laser.turn_for(delta)
+	if laser.in_air:
+		# Airborne: roll about the direction of travel, so the beam sweeps a disc.
+		model.roll += step
+	else:
+		# Grounded: turn on the spot at chest height.
+		model.yaw += step
+	laser.update(delta)
 
 func _step_remote(delta: float) -> void:
 	# 120 ms of smoothing: enough that a dropped packet is invisible, short enough that a
