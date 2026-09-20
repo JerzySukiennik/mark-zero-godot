@@ -159,6 +159,14 @@ func _rows() -> int:
 func _accept() -> void:
 	if tab == 0:
 		var who: Dictionary = ROSTER[row]
+		# NOT HERE, NOT ANY MORE. Which of the two you are is settled in the lobby and
+		# stands for the whole match — Jurek: "raz w lobby się wybiera character i potem
+		# już nie można zmieniać." Swapping mid-fight threw away and rebuilt every entity
+		# in the world, and in a room it took the other player's role off them without
+		# asking. The tab stays because seeing who is who is still worth a page.
+		if Net.hero_locked:
+			_say("SIDES ARE SET FOR THIS MATCH")
+			return
 		hero_chosen.emit(who.id)
 		_say("%s SELECTED" % who.name)
 		return
@@ -255,6 +263,10 @@ func _draw_roster(at: Vector2, w: float, u: float) -> void:
 		if taken_heroes.has(who.id):
 			_text(Vector2(at.x + 26 * u, y + 138 * u),
 				"TAKEN BY %s" % taken_heroes[who.id], AMBER, int(14 * u))
+		elif Net.hero_locked and not mine:
+			# Said on the row rather than only when it is pressed, so the answer arrives
+			# before the press instead of as a refusal afterwards.
+			_text(Vector2(at.x + 26 * u, y + 138 * u), "LOCKED FOR THIS MATCH", DIM, int(14 * u))
 
 func _draw_bay(at: Vector2, w: float, h: float, u: float) -> void:
 	# Spider-Man has no armour bay. Saying so beats listing five suits he cannot wear and

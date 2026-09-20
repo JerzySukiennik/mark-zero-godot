@@ -633,7 +633,9 @@ func _feed_roster() -> void:
 ## Same rule as SuitPilot: the strands and the camera are parented to the world so they do
 ## not swing with the body, so they have to be cleaned up by hand when he is replaced.
 func _exit_tree() -> void:
-	var doomed: Array = [camera, line["R"], line["L"]]
+	# `marks` too — it hangs off the world, so nothing else will ever free it, and a
+	# leaked one leaves a lock bracket stuck in the air. See SuitPilot._exit_tree.
+	var doomed: Array = [camera, line["R"], line["L"], marks]
 	for n: Node in doomed:
 		if n != null and is_instance_valid(n):
 			n.queue_free()

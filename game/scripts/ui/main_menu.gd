@@ -8,7 +8,11 @@ extends Node3D
 ## shown doing nothing in particular. A title card made of stills would need art nobody has
 ## made; this needs nothing that does not already exist.
 
-const ITEMS := ["SINGLE PLAYER", "MULTIPLAYER", "OPTIONS", "QUIT"]
+## One PLAY, not a solo item and a multiplayer item. Both used to lead to the arena by
+## different routes, and neither asked which character you were — so the choice happened
+## later, in the middle of a fight, from the suit menu. Everything about a match that has
+## to be settled before it starts is now settled in one place. See scripts/ui/lobby_ui.gd.
+const ITEMS := ["PLAY", "OPTIONS", "QUIT"]
 ## Seconds for one full turn of the camera. Slow enough to read as a held shot rather than
 ## a turntable, which is the whole of "zwolnione tempo".
 const ORBIT_TIME := 54.0
@@ -25,6 +29,8 @@ var _spider_rig: SuitRig
 var _web: WebLine
 var _iron_fx: Thrusters
 var _bob := 0.0
+var _lobby: LobbyUi
+var _layer: CanvasLayer
 
 func _ready() -> void:
 	_sky()
@@ -34,59 +40,24 @@ func _ready() -> void:
 	add_child(_cam)
 	_cam.current = true
 
-	var layer := CanvasLayer.new()
-	layer.layer = 10
-	add_child(layer)
+	_layer = CanvasLayer.new()
+	_layer.layer = 10
+	add_child(_layer)
 	_ui = _MenuUi.new()
 	_ui.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	layer.add_child(_ui)
+	_layer.add_child(_ui)
 	_ui.chosen.connect(_choose)
 
 	var sfx := Sfx.new()
 	sfx.name = "Sfx"
 	add_child(sfx)
 
-## The same environment the arena uses, because the menu showing a different sky than the
-## game is the cheapest possible way to look unfinished.
+## The same environment the arena uses — and now literally the same code, not a copy of
+## it. It WAS a copy, with its own sky energy and its own sun, which had already drifted
+## far enough that the menu and the game were lit differently. A duplicated look is a look
+## that will be wrong in one of the two places. See Arena.build_sky.
 func _sky() -> void:
-	var env := Environment.new()
-	var sky := Sky.new()
-	var mat := ProceduralSkyMaterial.new()
-	mat.sky_top_color = Color(0.10, 0.14, 0.22)
-	mat.sky_horizon_color = Color(0.30, 0.34, 0.40)
-	mat.ground_bottom_color = Color(0.05, 0.05, 0.06)
-	mat.ground_horizon_color = Color(0.16, 0.17, 0.19)
-	# LOWER THAN THE MAP'S. 2.6 was chosen to lift a metal figure off a near-black plate;
-	# here there is no plate to fight, so the same value simply blows the armour out into a
-	# pale ghost. The suit is polished metal — what it reflects IS the lighting, so the
-	# backdrop is the exposure control.
-	mat.sky_energy_multiplier = 1.15
-	sky.sky_material = mat
-	env.background_mode = Environment.BG_SKY
-	env.sky = sky
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	env.ambient_light_energy = 1.60
-	env.tonemap_mode = Environment.TONE_MAPPER_ACES
-	env.glow_enabled = true
-	env.glow_intensity = 0.55
-	env.fog_enabled = true
-	env.fog_density = 0.0016
-	env.fog_light_color = Color(0.16, 0.18, 0.22)
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-38, -128, 0)
-	sun.light_energy = 3.0
-	sun.light_color = Color(1.0, 0.96, 0.90)
-	add_child(sun)
-	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-16, 58, 0)
-	fill.light_energy = 1.05
-	fill.light_color = Color(0.72, 0.82, 1.0)
-	fill.shadow_enabled = false
-	add_child(fill)
+	Arena.build_sky(self)
 
 func _build_heroes() -> void:
 	# The armour, hovering, with its boots lit — the pose the whole game is about.
@@ -157,17 +128,40 @@ func _process(delta: float) -> void:
 
 func _choose(item: String) -> void:
 	match item:
-		"SINGLE PLAYER":
-			get_tree().change_scene_to_file("res://scenes/world/arena.tscn")
-		"MULTIPLAYER":
-			# Hosting IS single player plus a door — the arena already spawns off Net's
-			# roster, so there is no separate mode to write.
-			Net.host()
-			get_tree().change_scene_to_file("res://scenes/world/arena.tscn")
+		"PLAY":
+			_open_lobby()
 		"OPTIONS":
 			_ui.show_options()
 		"QUIT":
 			get_tree().quit()
+
+## The lobby is drawn OVER this scene rather than replacing it, so the two of them keep
+## hovering behind the choice. Picking a side while looking at the side you are picking is
+## the entire reason the menu was built as a scene in the first place.
+func _open_lobby() -> void:
+	if _lobby != null and is_instance_valid(_lobby):
+		return
+	_ui.visible = false
+	_lobby = LobbyUi.new()
+	_lobby.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_layer.add_child(_lobby)
+	_lobby.back.connect(_close_lobby)
+	_lobby.start_requested.connect(_start)
+
+func _close_lobby() -> void:
+	if _lobby != null and is_instance_valid(_lobby):
+		_lobby.queue_free()
+	_lobby = null
+	_ui.visible = true
+
+func _start() -> void:
+	# The host tells everyone at once; solo this is the same call with nothing under it.
+	# It also locks the sides, which is what makes the lobby the only place they are asked.
+	Net.match_started.connect(_enter, CONNECT_ONE_SHOT)
+	Net.begin_match()
+
+func _enter() -> void:
+	get_tree().change_scene_to_file("res://scenes/world/arena.tscn")
 
 ## The list itself. A Control rather than a set of nodes, for the same reason the HUD is:
 ## four labels and a highlight are less code drawn than assembled, and far less to keep in

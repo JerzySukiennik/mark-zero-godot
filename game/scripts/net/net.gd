@@ -82,9 +82,20 @@ func leave() -> void:
 	is_host = false
 	peers_changed.emit()
 
+## IS THERE ACTUALLY A NETWORK UNDER US? This used to ask whether `multiplayer_peer` was
+## non-null and connected — and both are true in a game nobody has networked, because
+## Godot installs an OfflineMultiplayerPeer by default and it reports CONNECTION_CONNECTED.
+## So `online` was true the moment the game booted, and every announce_* took the RPC
+## branch in a solo session. The lobby made it visible: it drew the in-a-room roster for a
+## player sitting alone at the menu.
+##
+## Asked of the peer's TYPE, because that is the thing that is actually different: a real
+## room is an ENet peer and nothing else in this game ever creates one.
 var online: bool:
-	get: return multiplayer.multiplayer_peer != null \
-		and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
+	get:
+		var p := multiplayer.multiplayer_peer
+		return p is ENetMultiplayerPeer \
+			and p.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED
 
 var my_id: int:
 	get: return multiplayer.get_unique_id() if multiplayer.multiplayer_peer != null else 1
@@ -136,6 +147,11 @@ static func other_hero(hero: String) -> String:
 func set_hero(id: int, hero: String) -> void:
 	if not players.has(id):
 		return
+	# Refused on the RECEIVING side as well, not only where the button was pressed: the
+	# exclusivity rule below pushes whoever held that role onto the other one, so an
+	# unchecked late call would change a character somebody else is currently playing.
+	if hero_locked:
+		return
 	for pid in players:
 		if pid != id and players[pid].get("hero", "") == hero:
 			players[pid].hero = other_hero(hero)
@@ -144,7 +160,25 @@ func set_hero(id: int, hero: String) -> void:
 		local_hero = hero
 	peers_changed.emit()
 
+## LOCKED ONCE THE MATCH STARTS. Jurek: "raz w lobby się wybiera character i potem już
+## nie można zmieniać." Which side you are is the shape of the match, not a setting: if
+## Iron Man can become Spider-Man mid-fight then the other player loses their role to a
+## keystroke, every entity in the world is thrown away and rebuilt, and there is no reason
+## to ever commit to one. The lobby is the only place it is a question.
+var hero_locked := false
+
+## Called when the lobby hands over to the arena. From here the choice stands until the
+## players come back out to the menu.
+func lock_heroes() -> void:
+	hero_locked = true
+
+func unlock_heroes() -> void:
+	hero_locked = false
+
 func announce_hero(hero: String) -> void:
+	if hero_locked:
+		push_warning("[net] hero is locked for this match")
+		return
 	if online:
 		set_hero.rpc(my_id, hero)
 	else:
@@ -165,5 +199,47 @@ func announce_armor(armor: String) -> void:
 	if online:
 		set_armor.rpc(my_id, armor)
 	else:
-		players[my_id] = { name = local_name, armor = armor }
+		# WRITE THE FIELD, DO NOT REBUILD THE ROW. This used to assign a fresh dictionary
+		# with only `name` and `armor` in it, which quietly deleted `hero` — so every
+		# change of armour in a solo game reset the player to Iron Man, because everything
+		# downstream reads the hero with a default of "ironman". Changing your suit is not
+		# a statement about which character you are.
+		if not players.has(my_id):
+			players[my_id] = { name = local_name, armor = armor, hero = local_hero }
+		else:
+			players[my_id].armor = armor
 		peers_changed.emit()
+
+# ---- starting the match ----------------------------------------------------------------
+
+signal match_started
+
+## THE HOST DECIDES WHEN. Everyone loads the arena on the same call rather than each
+## player pressing their own start, because the roster — and with it who is Iron Man and
+## who is Spider-Man — has to be settled and identical on every machine before a single
+## entity is spawned. A client that entered the arena early would spawn against a roster
+## that is still changing under it.
+@rpc("authority", "call_local", "reliable")
+func start_match() -> void:
+	lock_heroes()
+	match_started.emit()
+
+## Called by the host from the lobby. Solo, there is nobody to tell, so it is the same
+## call with no network under it — one code path, exactly like `players[1]` in _ready.
+func begin_match() -> void:
+	if online and is_host:
+		start_match.rpc()
+	else:
+		start_match()
+
+## Coming back out to the menu. The choice is only locked for the duration of a match.
+func end_match() -> void:
+	unlock_heroes()
+
+## Is this side already somebody else's? The lobby dims a side rather than letting two
+## people fight over it and silently pushing one of them off it.
+func hero_taken_by(hero: String) -> String:
+	for pid in players:
+		if pid != my_id and players[pid].get("hero", "") == hero:
+			return String(players[pid].get("name", "PILOT"))
+	return ""

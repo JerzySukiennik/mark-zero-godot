@@ -80,6 +80,12 @@ func _pick(item: String) -> void:
 			# Unpause FIRST. A scene change into a paused tree gives you a menu that does
 			# not respond to anything, which looks exactly like a crash.
 			get_tree().paused = false
+			# Leaving the match releases the sides and the room. Without this, coming back
+			# out to the menu would drop you into a lobby that still thinks you are locked
+			# into Spider-Man from the last game, with no way to ever change again.
+			Net.end_match()
+			if Net.online:
+				Net.leave()
 			get_tree().change_scene_to_file("res://scenes/ui/main_menu.tscn")
 		"QUIT":
 			get_tree().paused = false

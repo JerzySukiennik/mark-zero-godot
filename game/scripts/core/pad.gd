@@ -46,6 +46,7 @@ const BUTTONS := {
 	"faceplate":   [JOY_BUTTON_RIGHT_STICK],      # R3
 	"pause":       [JOY_BUTTON_START],            # options
 	"ui_accept_pad": [JOY_BUTTON_A],
+	"ui_back_pad": [JOY_BUTTON_B],
 	"ui_back":     [JOY_BUTTON_B],
 }
 

@@ -585,7 +585,12 @@ func _feed_roster() -> void:
 ## couple of changes of mind and the arena holds three chase cameras, of which the one still
 ## marked current belongs to an armour that no longer exists.
 func _exit_tree() -> void:
-	for n: Node in [camera, guns, trail]:
+	# `marks` BELONGS ON THIS LIST. It is parented to the world so the bracket does not
+	# bank with the body, which also means nothing frees it when the body goes — and a
+	# leaked ThreatMarks keeps whatever it was last told, so a red lock bracket stays
+	# frozen in mid-air forever after a hero swap or a player leaving. Jurek: "czasem się
+	# bugguje ta ramka od RPG."
+	for n: Node in [camera, guns, trail, marks]:
 		if n != null and is_instance_valid(n):
 			n.queue_free()
 

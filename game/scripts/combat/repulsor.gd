@@ -82,8 +82,22 @@ var charge := { "L": 1.0, "R": 1.0 }
 var locked := { "L": false, "R": false }
 
 ## Whole shots left in that hand, for the HUD to draw as pips.
+## How many shots the player can ACTUALLY take, which is not the same as how full the
+## tank is. Two lies used to live here.
+##
+## It rounded, so a tank at 0.969 reported 15.5 -> 16 pips, a full magazine, while the
+## sixteenth shot was still three quarters of a second away. And it ignored the lockout
+## entirely, so during a reload the strip could read 16 of 16 while the repulsor refused
+## to fire at all. Jurek: "czasem się bugguje wskaźnik ile jest strzałów (że pokazuje maks
+## a nie chce strzelać)." Nothing was bugged — the number was just not the number.
+##
+## Floor, because you have fifteen shots until you have sixteen; and capped below full
+## while locked, because a strip that reads full has said "shoot me" whatever colour it is.
 func shots_left(hand: String) -> int:
-	return int(round(charge.get(hand, 0.0) * SHOTS))
+	var n := int(floor(charge.get(hand, 0.0) * SHOTS))
+	if locked.get(hand, false):
+		return mini(n, SHOTS - 1)
+	return n
 
 func _ready() -> void:
 	build()
