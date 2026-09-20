@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mark Zero</title>
+<meta name="description" content="Iron Man i Spider-Man w Godocie. Gra na PC, tylko na pada. Pobierz build na Windows.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#070A0F;
+    --panel:#0E141D;
+    --edge:#1B2736;
+    --amber:#FFB43F;
+    --cyan:#8CE0FF;
+    --text:#C8D4E0;
+    --dim:#66788A;
+    --alert:#FF5A46;
+    --display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+    --body:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:var(--ground);
+    color:var(--text);
+    font-family:var(--body);
+    font-size:16px;
+    line-height:1.6;
+    padding:0 16px;
+    /* A thin amber scanline across the top, the same colour the suit's HUD uses. */
+    border-top:2px solid var(--amber);
+  }
+  .wrap{max-width:900px;margin:0 auto;padding-block:48px 72px}
+
+  /* ---- masthead ---- */
+  .eyebrow{
+    font-family:var(--mono);font-size:12px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--dim);margin:0 0 10px
+  }
+  h1{
+    font-family:var(--display);font-weight:700;
+    font-size:clamp(56px,13vw,132px);line-height:.86;letter-spacing:-.01em;
+    margin:0;color:var(--cyan);text-wrap:balance
+  }
+  .sub{
+    font-family:var(--display);font-weight:500;
+    font-size:clamp(18px,3.6vw,26px);letter-spacing:.02em;
+    color:var(--dim);margin:12px 0 0
+  }
+
+  /* ---- the download, which is the point of the page ---- */
+  .get{
+    margin:44px 0 0;padding:26px;
+    background:var(--panel);border:1px solid var(--edge);
+    display:flex;flex-wrap:wrap;gap:22px;align-items:center;justify-content:space-between
+  }
+  .btn{
+    display:inline-block;padding:15px 30px;
+    background:var(--amber);color:#0A0A0A;text-decoration:none;
+    font-family:var(--display);font-weight:700;font-size:25px;letter-spacing:.04em;
+    text-transform:uppercase;border:0
+  }
+  .btn:hover,.btn:focus-visible{background:#FFC968}
+  .btn:focus-visible{outline:3px solid var(--cyan);outline-offset:3px}
+  .meta{font-family:var(--mono);font-size:13px;color:var(--dim);line-height:1.9}
+  .meta b{color:var(--text);font-weight:600}
+
+  .note{
+    margin:16px 0 0;padding:14px 18px;
+    border-left:3px solid var(--amber);background:rgba(255,180,63,.06);
+    font-size:14.5px
+  }
+  .note.pad{border-left-color:var(--cyan);background:rgba(140,224,255,.06)}
+
+  h2{
+    font-family:var(--display);font-weight:600;font-size:30px;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--cyan);
+    margin:56px 0 4px;padding-bottom:8px;border-bottom:1px solid var(--edge)
+  }
+  h2 + p{margin-top:14px}
+  p{max-width:62ch}
+
+  /* ---- controls ---- */
+  .scroll{overflow-x:auto;margin-top:20px}
+  table{border-collapse:collapse;width:100%;min-width:520px;font-size:15px}
+  th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--edge);vertical-align:top}
+  thead th{
+    font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--dim);font-weight:400
+  }
+  tbody td:first-child{white-space:nowrap}
+  .key{
+    font-family:var(--mono);font-weight:600;font-size:13px;
+    color:var(--amber);border:1px solid rgba(255,180,63,.35);
+    padding:3px 9px;display:inline-block;line-height:1.5
+  }
+  .none{color:var(--dim)}
+
+  ul{padding-left:0;list-style:none;margin:20px 0 0}
+  li{
+    padding:11px 0 11px 20px;border-left:2px solid var(--alert);
+    margin-bottom:10px;background:rgba(255,90,70,.05);font-size:15px
+  }
+  li.ok{border-left-color:var(--cyan);background:rgba(140,224,255,.05)}
+
+  a{color:var(--cyan)}
+  footer{
+    margin-top:64px;padding-top:22px;border-top:1px solid var(--edge);
+    font-family:var(--mono);font-size:12.5px;color:var(--dim)
+  }
+  @media (max-width:560px){
+    .get{padding:20px}
+    .btn{width:100%;text-align:center}
+  }
+</style>
+</head>
+<body>
+<main class="wrap">
+
+  <p class="eyebrow">Gzowo · gra na PC · Godot 4.6</p>
+  <h1>MARK&nbsp;ZERO</h1>
+  <p class="sub">Iron Man i Spider-Man. Jeden lata, drugi się huśta.</p>
+
+  <section class="get">
+    <a class="btn" href="https://github.com/JerzySukiennik/mark-zero-godot/releases/download/v0.1.0/MarkZero.exe">Pobierz na Windows</a>
+    <p class="meta">
+      <b>MarkZero.exe</b> · 155&nbsp;MB · v0.1.0<br>
+      Windows 64-bit · jeden plik, nic się nie instaluje<br>
+      macOS: <span class="none">jeszcze nie</span>
+    </p>
+  </section>
+
+  <p class="note pad"><strong>Potrzebny kontroler.</strong> DualShock 4 albo zgodny. Nie ma sterowania klawiaturą i nie będzie — gra była projektowana pod pada od pierwszej linijki, więc bez niego nie ruszysz się z miejsca.</p>
+
+  <p class="note"><strong>SmartScreen krzyknie.</strong> Plik nie jest podpisany certyfikatem, bo podpis kosztuje kilkaset dolarów rocznie. Kliknij <em>Więcej informacji → Uruchom mimo to</em>.</p>
+
+  <h2>Co jest w środku</h2>
+  <p>Lobby, w którym stronę wybierasz <strong>raz</strong> — i trzyma przez cały mecz. Multiplayer działa w sieci domowej: host się rozgłasza, a dołączający wybiera pokój z listy, bez wpisywania adresu IP (na padzie nie da się go wpisać).</p>
+  <p>Pięć zbroi, każda z dwoma własnymi gadżetami zamiast samych innych liczb: Mark I ma płyty czołowe i wybuch złomu, Mark III chaff i salwę mikropocisków, Mark L nano-tarczę i nano-ostrze. Iron Spider ma cztery nogi, które biją w czterech kierunkach naraz — jedyny atak w grze, który odpowiada komuś stojącemu za tobą.</p>
+  <p>Przeciwnicy: pięściarze, nożownicy, pistolety, karabiny, RPG i brute, którego trudniej związać siecią.</p>
+
+  <h2>Sterowanie</h2>
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr><th>Wejście</th><th>Iron Man</th><th>Spider-Man</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="key">L STICK</span></td><td>lot / chód</td><td>ruch</td></tr>
+        <tr><td><span class="key">R STICK</span></td><td>obrót ciała</td><td>obrót ciała</td></tr>
+        <tr><td><span class="key">R2</span></td><td>naddźwiękowa</td><td>huśtanie na sieci</td></tr>
+        <tr><td><span class="key">✕</span></td><td>start i wznoszenie</td><td>skok, doskok, odbicie od ściany</td></tr>
+        <tr><td><span class="key">R1</span> <span class="key">L1</span></td><td>prawy / lewy repulsor</td><td>sieć z prawej / lewej ręki</td></tr>
+        <tr><td><span class="key">□</span></td><td>wieżyczka naramienna</td><td>cios · trzymaj = wybicie w górę</td></tr>
+        <tr><td><span class="key">△</span></td><td class="none">—</td><td>uderzenie z doskoku</td></tr>
+        <tr><td><span class="key">○</span></td><td class="none">—</td><td>unik</td></tr>
+        <tr><td><span class="key">L3</span></td><td>gadżet obronny zbroi</td><td class="none">—</td></tr>
+        <tr><td><span class="key">R3</span></td><td>gadżet zaczepny zbroi</td><td>nogi Iron Spidera</td></tr>
+        <tr><td><span class="key">TOUCHPAD</span></td><td>menu stroju</td><td>menu</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="margin-top:18px">Pełny układ, razem z listą tego, co w nim jest do poprawienia i dlaczego, leży w <a href="https://github.com/JerzySukiennik/mark-zero-godot/blob/main/docs/controls-audit.md">audycie sterowania</a>.</p>
+
+  <h2>Co jest zepsute</h2>
+  <p>Wiadomo o tym i jest zapisane — lepiej przeczytać niż odkryć samemu:</p>
+  <ul>
+    <li><strong>OPTIONS otwiera pauzę i menu stroju naraz.</strong> Ten sam przycisk siedzi w obu akcjach.</li>
+    <li><strong>Lista sterowania w grze wymienia AIM, INTERACT i SUIT ON/OFF</strong> — żadna z tych trzech akcji nie istnieje w kodzie.</li>
+    <li><strong>Spider-Man nie ma własnej listy sterowania</strong> — ogląda listę Iron Mana.</li>
+    <li><strong>Laser z nadgarstka wymaga trzymania △ i ○ razem</strong>, czyli kciuka zdjętego z prawej gałki na cały ruch.</li>
+    <li><strong>Brak buildu na macOS.</strong> Wymaga szablonu eksportu, którego nie ma jeszcze na dysku.</li>
+    <li class="ok"><strong>Błędy „node not inside tree" w logu</strong> pochodzą od kamery pogoni. Widać je w konsoli, gry nie psują.</li>
+  </ul>
+
+  <footer>
+    Kod, historia i zgłaszanie błędów: <a href="https://github.com/JerzySukiennik/mark-zero-godot">github.com/JerzySukiennik/mark-zero-godot</a><br>
+    Zbudowane w Godocie 4.6.2 · gzowo.fun
+  </footer>
+
+</main>
+</body>
+</html>
