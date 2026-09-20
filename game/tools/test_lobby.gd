@@ -48,7 +48,34 @@ func _ready() -> void:
 	Net.announce_hero("ironman")
 	_ok(Net.local_hero == "ironman", "so the next match can be the other one")
 
+	print("=== two machines reach the SAME answer about who is who ===")
+	# The bug this replaces: the rule was "move the newcomer", and the newcomer is a
+	# different person on each machine, so the host's screen and the joiner's screen
+	# disagreed about which of them was Iron Man. Both sides here declare Iron Man, which
+	# is the default, so it is also the ordinary case rather than an awkward one.
+	Net.unlock_heroes()
+
+	# The HOST's view: it is peer 1 and already in, then 77 arrives wanting Iron Man.
+	Net.players = { 1: { name = "HOST", armor = "mk3", hero = "ironman" } }
+	Net._register(77, "JOIN", "mk3", "ironman")
+	var host_view := "%s/%s" % [Net.players[1].hero, Net.players[77].hero]
+
+	# The JOINER's view of the very same room: it is peer 77 and knows only itself, then
+	# the host arrives, also wanting Iron Man.
+	Net.players = { 77: { name = "JOIN", armor = "mk3", hero = "ironman" } }
+	Net._register(1, "HOST", "mk3", "ironman")
+	var join_view := "%s/%s" % [Net.players[1].hero, Net.players[77].hero]
+
+	_ok(host_view == join_view,
+		"both machines agree (host sees %s, joiner sees %s)" % [host_view, join_view])
+	_ok(host_view == "ironman/spiderman",
+		"and the host keeps the side it picked (%s)" % host_view)
+
 	print("=== two players cannot be the same character ===")
+	# Fresh roster: the block above left peer 77 in it, and a stale third player makes
+	# hero_taken_by answer about the wrong person.
+	Net.players = { 1: { name = "JUREK", armor = "mk1", hero = "spiderman" } }
+	Net.local_hero = "spiderman"
 	Net.players[2] = { name = "NAREK", armor = "mk3", hero = "ironman" }
 	Net.set_hero(1, "ironman")
 	_ok(Net.players[2].get("hero", "") == "spiderman",

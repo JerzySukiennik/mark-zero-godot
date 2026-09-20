@@ -131,12 +131,37 @@ func _on_server_gone() -> void:
 @rpc("any_peer", "call_remote", "reliable")
 func _register(id: int, who: String, armor: String, hero: String) -> void:
 	players[id] = { name = who, armor = armor, hero = hero }
-	# TWO HEROES, ONE EACH. If the newcomer wants the role we are already playing, they get
-	# the other one — settled locally and identically on every peer, so nobody has to ask
-	# the host and there is no window where the room holds two Iron Men.
-	if id != my_id and hero == players.get(my_id, {}).get("hero", ""):
-		players[id].hero = other_hero(hero)
+	_settle_heroes()
 	peers_changed.emit()
+
+## TWO HEROES, ONE EACH — and every machine must reach the SAME answer.
+##
+## This used to read "if the newcomer wants the role I am playing, move the newcomer",
+## which sounds right and is not, because "the newcomer" is a different person on each
+## machine. Measured across a Mac hosting and the laptop joining, with both sides having
+## defaulted to Iron Man: the host's screen showed HOST=IRON MAN, JOIN=SPIDER-MAN, and at
+## the same moment the joiner's screen showed JOIN=IRON MAN, HOST=SPIDER-MAN. Both players
+## believed they were Iron Man and that the other one was Spider-Man. Jurek: "nawet z
+## jednym pokojem nie działa" — it connected perfectly, it just could not agree on who
+## anybody was.
+##
+## The fix is to decide it from something both machines already hold and that neither can
+## see differently: the peer ids. Walked in ascending order, the lower id keeps a contested
+## side and the higher one takes the other. The host is always peer 1, so the host keeps
+## what it picked, and every peer computes that same result from the same roster without
+## asking anyone.
+func _settle_heroes() -> void:
+	var ids: Array = players.keys()
+	ids.sort()
+	var taken: Dictionary = {}
+	for pid in ids:
+		var want: String = String(players[pid].get("hero", HEROES[0]))
+		if taken.has(want):
+			want = other_hero(want)
+		taken[want] = pid
+		players[pid].hero = want
+		if pid == my_id:
+			local_hero = want
 
 static func other_hero(hero: String) -> String:
 	return "spiderman" if hero == "ironman" else "ironman"
