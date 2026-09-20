@@ -47,8 +47,16 @@ var _lights: Array = []
 var _rig: SuitRig
 var _level := [0.0, 0.0, 0.0, 0.0]
 
+## The engine note. A LOOP rather than a sound per event, because thrust is a continuous
+## quantity and anything triggered would either machine-gun or lag behind the stick. Volume
+## and pitch both follow it: loudness says how hard, pitch says how fast.
+const HUM_QUIET := -34.0
+const HUM_LOUD := -7.0
+var _hum: AudioStreamPlayer3D
+
 func _ready() -> void:
 	name = "Thrusters"
+	_make_hum()
 	for i in 2:
 		var l := OmniLight3D.new()
 		l.light_color = Color(1.0, 0.74, 0.45)
@@ -313,6 +321,8 @@ func drive(delta: float, thrust: float, lateral: float, vertical: float, braking
 	var palm := clampf(braking * 0.9 + absf(lateral) * 0.55 + maxf(vertical, 0.0) * 0.35
 		+ thrust * 0.12 + hover * 0.75, 0.0, 1.3)
 
+	_hum_at(maxf(boot, palm))
+
 	for i in _emitters.size():
 		var e = _emitters[i]
 		var want: float = boot if e.boot else palm
@@ -371,3 +381,29 @@ func _place_light(idx: int, a: String, b: String, level: float) -> void:
 	# instead. This cost a multi-second freeze on the first shot in the browser build.
 	l.light_energy = level * 5.5
 	l.omni_range = 7.0 + level * 5.0
+
+func _make_hum() -> void:
+	if _hum != null:
+		return
+	_hum = AudioStreamPlayer3D.new()
+	var res = load("res://assets/audio/thruster_loop.ogg")
+	if res == null:
+		return
+	# Godot will not loop an OGG unless the resource says so, and a one-shot engine note
+	# that stops after two seconds is worse than silence — it reads as the suit cutting out.
+	if res is AudioStreamOggVorbis:
+		(res as AudioStreamOggVorbis).loop = true
+	_hum.stream = res
+	_hum.unit_size = 22.0
+	_hum.volume_db = HUM_QUIET
+	_hum.max_distance = 220.0
+	add_child(_hum)
+	_hum.play()
+
+## Called from `drive`, so the note tracks the same number the flames do.
+func _hum_at(level: float) -> void:
+	if _hum == null:
+		return
+	var l: float = clampf(level, 0.0, 1.4)
+	_hum.volume_db = lerpf(HUM_QUIET, HUM_LOUD, clampf(l / 1.1, 0.0, 1.0))
+	_hum.pitch_scale = lerpf(0.72, 1.35, clampf(l / 1.2, 0.0, 1.0))

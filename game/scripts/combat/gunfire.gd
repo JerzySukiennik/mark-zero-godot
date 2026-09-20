@@ -163,6 +163,8 @@ func _land(r: Round, at: Vector3, collider) -> void:
 			var d: float = (n as Node3D).global_position.distance_to(at)
 			if d < r.blast:
 				_apply(n, r.damage * (1.0 - d / r.blast), at)
+		Sfx.play("explosion", at, 2.0)
+		Sfx.play("explosion_low", at, 0.0, 0.9)
 		_shout(at, r.damage, r.blast)
 		return
 	if collider != null:

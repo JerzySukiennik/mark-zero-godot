@@ -180,6 +180,7 @@ func fire(target: Vector3) -> Vector3:
 	s.node.position = muzzle
 	s.node.look_at_from_position(muzzle, muzzle + dir, Vector3.UP)
 	s.light.light_energy = 5.0
+	Sfx.play("turret", muzzle, -2.0)
 	fired.emit()
 	Rumble.hit(0.55, 0.35, 0.12)
 	# RECOIL, and a small one. This was 5.5 m/s of velocity PER SHOT, applied straight to

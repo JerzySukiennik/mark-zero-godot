@@ -16,6 +16,11 @@ func _ready() -> void:
 	# between "it launched and rendered nothing" and "it never launched".
 	print("[mark zero] arena starting — display %s, renderer %s" % [
 		DisplayServer.get_name(), RenderingServer.get_video_adapter_name()])
+	# Sound first, so anything that makes a noise on its very first frame can be heard.
+	var sfx := Sfx.new()
+	sfx.name = "Sfx"
+	add_child(sfx)
+
 	stage = Stage.new()
 	stage.name = "Stage"
 	add_child(stage)

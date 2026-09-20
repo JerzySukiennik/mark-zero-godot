@@ -253,6 +253,7 @@ func _topple(delta: float) -> void:
 func _die(from: Vector3) -> void:
 	state = DOWN
 	_dead_for = 0.0
+	Sfx.play("body_drop", global_position, -4.0)
 	# Forwards or backwards depending on which way he was hit, which is the one bit of
 	# variety that costs nothing and reads immediately.
 	var facing := global_transform.basis * Vector3(0, 0, -1)
@@ -440,6 +441,7 @@ func _swing() -> void:
 	if d > float(spec["reach"]) * 1.35:
 		return
 	poses.strike()
+	Sfx.play("punch" if kind != "brute" else "punch_big", global_position, -3.0)
 	if _target.has_method("take_hit"):
 		_target.take_hit(float(spec["damage"]), global_position, kind)
 
@@ -455,6 +457,11 @@ func _shoot() -> void:
 	var sp: float = spec["spread"]
 	aim = (aim + Vector3(randf_range(-sp, sp), randf_range(-sp, sp), randf_range(-sp, sp))).normalized()
 	poses.strike()
+	# The rifle is the heavier of the two synthesised shots; an RPG has its own launch.
+	if spec["rocket"]:
+		Sfx.play("rpg_launch", muzzle, -1.0)
+	else:
+		Sfx.play("gunshot_rifle" if kind == "rifle" else "gunshot", muzzle, -5.0)
 	guns.fire(muzzle, aim, float(spec["muzzle_speed"]), float(spec["damage"]),
 		float(spec["blast"]) if spec["rocket"] else 0.0,
 		_target if spec["rocket"] else null)

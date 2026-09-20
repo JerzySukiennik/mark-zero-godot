@@ -64,6 +64,8 @@ var _recoil := { "R": 0.0, "L": 0.0 }
 var _buffer := { "R": 0.0, "L": 0.0 }
 ## Who the reticle is currently over. Shared by the friction, the magnetism and the HUD.
 var locked_on: Node3D = null
+var _last_step := 0
+var _was_boosting := false
 ## How far the firing arm reaches past the shared stance, in radians.
 const SHOT_REACH := 0.42
 ## The snap back through the shoulder. Cubed, so it is violent for two frames and then gone.
@@ -278,6 +280,9 @@ func _step_local(delta: float) -> void:
 	# Supersonic on R2, Mk II and up: the Mk I is a flying oil drum and has no business
 	# breaking the sound barrier.
 	var supersonic := Pad.thrust() > 0.35 and armor_id != "mk1"
+	if supersonic and not _was_boosting:
+		Sfx.play("boost", global_position, -2.0)
+	_was_boosting = supersonic
 
 	# AIMING SLOWS THE WORLD, the way Marvel's Spider-Man does it. Time dilation rather than
 	# a zoom: it buys thinking time instead of magnifying the target, which is what makes a
@@ -317,6 +322,13 @@ func _step_local(delta: float) -> void:
 	_laser(delta)
 
 	if skel != null:
+		# FOOTSTEPS OFF THE STRIDE, not off a timer. The cycle already counts distance, so
+		# every half-cycle is exactly one foot landing, at any speed, for free.
+		if model.grounded and model.ground_speed > 0.6:
+			var half := floori(model.stride_phase * 2.0)
+			if half != _last_step:
+				_last_step = half
+				Sfx.play("step", global_position, lerpf(-18.0, -7.0, clampf(model.ground_speed / 7.0, 0.0, 1.0)))
 		poses.update(delta, model, cmd, skel)
 		_drive_shot_arms(delta)
 		_drive_laser_arm()
@@ -338,6 +350,7 @@ func _step_local(delta: float) -> void:
 	if was_flying and model.grounded:
 		var f := clampf(-falling / 40.0, 0.0, 1.0)
 		Rumble.landing(f)
+		Sfx.play("land", global_position, lerpf(-12.0, 1.0, f), lerpf(1.15, 0.8, f))
 		if f > 0.25:
 			poses.land_hard(f)
 
@@ -418,6 +431,10 @@ func _shoot(aiming: bool, delta: float) -> void:
 		if _buffer[hand] <= 0.0:
 			continue
 		if not guns.ready_to_fire(hand):
+			# The empty click, and only on the press that found it empty — held down it
+			# would be a machine gun of error noises.
+			if _buffer[hand] >= FIRE_BUFFER - 0.001:
+				Sfx.flat("repulsor_dry", -12.0)
 			continue
 		# NO ARM, NO REPULSOR. The cost of losing a piece is the point of losing it.
 		if armour != null and not armour.can_use(hand):
@@ -569,6 +586,7 @@ func take_hit(amount: float, from: Vector3, kind := "") -> void:
 	health = clampf(health - amount / MAX_HP, 0.0, 1.0)
 	_hurt_flash = 0.35
 	Rumble.hit(0.7, 0.45, 0.14)
+	Sfx.play("hit_metal", global_position, -2.0)
 	# THE SUIT COMES APART AS IT GOES. Pieces are shed against the new figure, so a rocket
 	# that takes a quarter of the bar strips a quarter of the armour in one go.
 	if armour != null:

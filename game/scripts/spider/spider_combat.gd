@@ -167,6 +167,7 @@ func _run_zip(delta: float, model: SpiderModel) -> void:
 	var d := to.length()
 	if d <= ZIP_HIT or t <= 0.0:
 		if d <= ZIP_HIT * 1.6:
+			Sfx.play("punch", target.global_position, -1.0)
 			target.take_hit(PUNCH, model.position, "spider")
 			# Knocked back along the punch, and up a little so it reads as a hit rather
 			# than a shove.
@@ -195,6 +196,7 @@ func _try_launch(model: SpiderModel, cmd: Dictionary, tree: SceneTree) -> void:
 		state = ZIP
 		t = ZIP_TIMEOUT
 		return
+	Sfx.play("punch_big", target.global_position, 0.0, 0.85)
 	target.take_hit(PUNCH, model.position, "spider")
 	target.launch(LAUNCH_UP, model.velocity * 0.3)
 	state = LAUNCH
@@ -222,6 +224,7 @@ func _start_dodge(model: SpiderModel, cmd: Dictionary) -> void:
 	dodge_dir = dir.normalized()
 	state = DODGE
 	t = DODGE_TIME
+	Sfx.play("dodge", model.position, -6.0)
 	# A backwards dodge is a backflip; sideways is a roll. The pose layer reads this.
 	var back: float = (model.basis_ * Vector3(0, 0, 1)).normalized().dot(dodge_dir)
 	dodge_back = back > 0.4

@@ -173,6 +173,7 @@ func fire(hand: String, muzzle: Vector3, target: Vector3, chase: Node3D = null) 
 	if b == null:
 		return Vector3.ZERO
 	_cool[hand] = COOLDOWN
+	Sfx.play("repulsor", muzzle, -4.0)
 	charge[hand] = maxf(0.0, charge[hand] - DRAIN)
 	if charge[hand] <= 0.0001:
 		locked[hand] = true

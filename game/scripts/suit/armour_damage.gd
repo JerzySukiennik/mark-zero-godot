@@ -84,6 +84,7 @@ func _detach(entry: Dictionary) -> void:
 	if node == null:
 		return
 	shed_count += 1
+	Sfx.play("armour_drop", node.global_position, -6.0)
 	var world := node.global_transform
 	var parent := get_parent()
 	node.get_parent().remove_child(node)

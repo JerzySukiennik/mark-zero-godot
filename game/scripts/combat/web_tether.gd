@@ -81,6 +81,7 @@ func fire(from: Vector3, target: Node3D, at: Vector3 = Vector3.INF) -> bool:
 	_fly_t = 0.0
 	reach = 0.0
 	state = FLYING
+	Sfx.play("thwip", from, -2.0)
 	return true
 
 func release() -> void:
@@ -108,6 +109,7 @@ func step(delta: float, pos: Vector3, vel: Vector3, reel: float) -> Vector3:
 			# The rope is exactly as long as the shot that made it. Starting shorter yanks
 			# the player forward the instant it lands, which reads as being harpooned.
 			rest_length = maxf(MIN_LENGTH, pos.distance_to(anchor_point()))
+			Sfx.play("web_stick", anchor_point(), -4.0)
 		return Vector3.ZERO
 
 	# ---- attached ------------------------------------------------------------------

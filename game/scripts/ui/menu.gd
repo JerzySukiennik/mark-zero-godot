@@ -71,6 +71,7 @@ func _ready() -> void:
 
 func open() -> void:
 	_open = true
+	Sfx.flat("ui_open", -10.0)
 	visible = true
 	row = 0
 	opened.emit()
@@ -78,6 +79,7 @@ func open() -> void:
 
 func close() -> void:
 	_open = false
+	Sfx.flat("ui_close", -10.0)
 	visible = false
 	closed.emit()
 
@@ -108,16 +110,21 @@ func step(delta: float) -> void:
 	# for the list.
 	if pad.just_pressed("fire_l"):
 		tab = wrapi(tab - 1, 0, TABS.size()); row = 0
+		Sfx.flat("ui_move", -10.0)
 	if pad.just_pressed("fire_r"):
 		tab = wrapi(tab + 1, 0, TABS.size()); row = 0
+		Sfx.flat("ui_move", -10.0)
 
 	# A stick is analog and a list is not, so it has to be rate-limited or one flick scrolls
 	# the whole catalogue. Repeats while held, after a pause, like a key.
 	_nav_cool = maxf(0.0, _nav_cool - delta)
 	var mv: float = pad.move().y
 	if absf(mv) > 0.55 and _nav_cool <= 0.0:
+		var was_row := row
 		row = clampi(row + (1 if mv > 0.0 else -1), 0, maxi(0, _rows() - 1))
 		_nav_cool = 0.16
+		if row != was_row:
+			Sfx.flat("ui_move", -14.0)
 	elif absf(mv) < 0.3:
 		_nav_cool = 0.0
 
@@ -153,6 +160,9 @@ func _accept() -> void:
 		_say("NEED %d MORE CREDITS" % (item.price - credits))
 
 func _say(t: String) -> void:
+	# Deliberately NOT Kenney's confirmation_001: Jurek has said he dislikes it and that
+	# it had been pasted onto every success in every project.
+	Sfx.flat("ui_select", -9.0)
 	_msg = t
 	_msg_t = 2.4
 

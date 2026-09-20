@@ -73,6 +73,8 @@ var _throw := { "R": 0.0, "L": 0.0 }
 var _held := { "R": false, "L": false }
 var _buffer := { "R": 0.0, "L": 0.0 }
 var _swing_hand := "L"
+var _whoosh := 0.35
+var _last_step := 0
 ## What he is carrying, if anything.
 var carried: Prop = null
 const CARRY_RANGE := 9.0
@@ -332,13 +334,32 @@ func _physics_process(delta: float) -> void:
 		skel.update_pose(delta)
 
 	if was_down and model.grounded:
-		poses.land_hard(clampf(-fell / 30.0, 0.0, 1.0))
+		var force: float = clampf(-fell / 30.0, 0.0, 1.0)
+		poses.land_hard(force)
+		Sfx.play("land", global_position, lerpf(-14.0, -1.0, force), lerpf(1.2, 0.85, force))
 		# THE LEGS CATCH HIM. Jurek: coming down off a swing "one powinny sie tak otwierac
 		# i tak hamowac go od tylu". They are already out in the air; holding them out
 		# through the landing is what turns a fold-away into a brace.
 		_brace = 0.55 + clampf(-fell / 40.0, 0.0, 1.0) * 0.45
 
 	_update_threat_marks(delta)
+	# THE RUSH OF AIR. Only while actually carried by a line and actually quick, retriggered
+	# on a distance clock so it does not machine-gun at the bottom of an arc.
+	var hanging: bool = tether["R"].state == WebTether.ATTACHED or tether["L"].state == WebTether.ATTACHED
+	if hanging and model.speed > 16.0:
+		_whoosh -= delta * (model.speed / 26.0)
+		if _whoosh <= 0.0:
+			_whoosh = 1.0
+			Sfx.play("swing", global_position, lerpf(-16.0, -4.0, clampf(model.speed / 45.0, 0.0, 1.0)))
+	else:
+		_whoosh = 0.35
+
+	if model.grounded and model.ground_speed > 0.6:
+		var half := floori(model.stride_phase * 2.0)
+		if half != _last_step:
+			_last_step = half
+			Sfx.play("step", global_position, lerpf(-20.0, -10.0, clampf(model.ground_speed / 9.0, 0.0, 1.0)))
+
 	_draw_webs()
 
 	if camera != null:
@@ -589,6 +610,7 @@ func take_hit(amount: float, from: Vector3, kind := "") -> void:
 	health = clampf(health - amount / MAX_HP, 0.0, 1.0)
 	_hurt_flash = 0.35
 	Rumble.hit(0.7, 0.45, 0.14)
+	Sfx.play("punch", global_position, -4.0)
 	# Shoved by what hit you. Small — being knocked about by rifle fire would take the
 	# flight model out of the player's hands, which is the one thing it must never do.
 	var push := global_position - from
