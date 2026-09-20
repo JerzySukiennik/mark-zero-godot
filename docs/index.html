@@ -126,9 +126,9 @@
   <p class="sub">Iron Man i Spider-Man. Jeden lata, drugi się huśta.</p>
 
   <section class="get">
-    <a class="btn" href="https://github.com/JerzySukiennik/mark-zero-godot/releases/download/v0.1.0/MarkZero.exe">Pobierz na Windows</a>
+    <a class="btn" href="https://github.com/JerzySukiennik/mark-zero-godot/releases/download/v0.1.1/MarkZero.exe">Pobierz na Windows</a>
     <p class="meta">
-      <b>MarkZero.exe</b> · 155&nbsp;MB · v0.1.0<br>
+      <b>MarkZero.exe</b> · 155&nbsp;MB · v0.1.1<br>
       Windows 64-bit · jeden plik, nic się nie instaluje<br>
       macOS: <span class="none">jeszcze nie</span>
     </p>
@@ -175,6 +175,14 @@
     <li><strong>Laser z nadgarstka wymaga trzymania △ i ○ razem</strong>, czyli kciuka zdjętego z prawej gałki na cały ruch.</li>
     <li><strong>Brak buildu na macOS.</strong> Wymaga szablonu eksportu, którego nie ma jeszcze na dysku.</li>
     <li class="ok"><strong>Błędy „node not inside tree" w logu</strong> pochodzą od kamery pogoni. Widać je w konsoli, gry nie psują.</li>
+  </ul>
+
+  <h2>Granie we dwoje</h2>
+  <p>Jeden otwiera pokój, drugi wchodzi w <strong>PLAY</strong> i wybiera go z listy — adresu się nie wpisuje, pokoje ogłaszają się same w sieci. Trzy rzeczy, o które to się rozbija:</p>
+  <ul>
+    <li class="ok"><strong>Kliknij „Zezwól" w oknie zapory Windows</strong> przy pierwszym uruchomieniu, dla sieci <strong>prywatnej</strong>. Bez tego host jest niewidoczny, a gra wygląda na całkowicie sprawną.</li>
+    <li class="ok"><strong>Obie maszyny w tej samej sieci domowej.</strong> Ogłoszenia idą broadcastem, który nie przechodzi przez router — więc w domu tak, przez internet nie.</li>
+    <li class="ok"><strong>Jedna instancja na komputer</strong> może szukać pokojów. Dwa okna na jednym PC niczego nie przetestują: drugie nie zobaczy nic.</li>
   </ul>
 
   <footer>
