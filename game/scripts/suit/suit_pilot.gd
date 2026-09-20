@@ -30,8 +30,11 @@ const AUTO_BRAKE_FLOOR := 1.5
 ## AIM ASSIST. The cone the reticle counts as "on" a man, and how far the look stick is
 ## slowed while he is inside it — friction, the oldest trick in the book and the one that
 ## costs the player nothing, because it only ever makes the camera easier to hold still.
-const ASSIST_CONE := deg_to_rad(7.0)
-const ASSIST_FRICTION := 0.45
+## Narrowed, and the friction lightened. Jurek: "jest zbyt mocne to automatyczne
+## wspomaganie. Powinno być, ale nie takie mocne." Assistance the player can feel steering
+## for him stops being help and starts being a fight over the camera.
+const ASSIST_CONE := deg_to_rad(4.0)
+const ASSIST_FRICTION := 0.74
 
 @export var peer_id := 1
 @export var armor_id := "mk1"
@@ -498,10 +501,15 @@ func _laser(delta: float) -> void:
 		# circle and cuts everything standing around him.
 		model.yaw += step
 	else:
-		# ON THE GROUND THE FEET STAY. A man cannot spin on the spot through 360 degrees
-		# without moving them, so the sweep is the SPINE twisting over planted legs, and it
-		# is capped where a spine stops rather than running all the way round.
-		laser.twist = clampf(laser.twist + step, -PI * 0.62, PI * 0.62)
+		# THE WHOLE BODY TURNS ON THE GROUND TOO.
+		#
+		# It used to be a spine twist over planted feet, which is anatomically the honest
+		# answer and completely invisible: measured at 112 degrees of twist, and Jurek's
+		# reading of it was "on się nie obraca w ogóle". A move nobody can see is a move
+		# that does not exist. So the body turns, more slowly than in the air, and the
+		# twist stays on top as a lean into it — the legs are the pose layer's problem.
+		model.yaw += step
+		laser.twist = clampf(laser.twist + step * 0.18, -PI * 0.3, PI * 0.3)
 	laser.update(delta)
 
 func _step_remote(delta: float) -> void:
@@ -650,18 +658,10 @@ func _update_threat_marks(delta: float) -> void:
 		return
 	marks.global_position = global_position
 
-	# Spider-sense: is anything winding up on ME, and how soon. The closest tell wins, so
-	# a second man aiming does not reset the urgency of the first.
-	var soonest := -1.0
-	for n in get_tree().get_nodes_in_group("enemy"):
-		if not (n is Enemy) or not is_instance_valid(n):
-			continue
-		var e: Enemy = n
-		var tell: float = e.telegraphing()
-		if tell <= 0.0 or e._target != self:
-			continue
-		soonest = maxf(soonest, 1.0 - clampf(tell / Enemy.AIM_TELL, 0.0, 1.0))
-	marks.sense_on = move_toward(marks.sense_on, maxf(0.0, soonest), delta * 6.0)
+	# NOT FOR THE ARMOUR. Spider-sense is Spider-Man's, and only his — Jurek: "Iron Man ma
+	# jakby... też ma spider sense, więc wyłącz mu to." The armour keeps the missile
+	# bracket, which is a lock warning and not a sixth sense.
+	marks.sense_on = 0.0
 
 	# And the bracket, for a rocket that is actually chasing this body.
 	var near := -1.0

@@ -246,9 +246,11 @@ func _topple(delta: float) -> void:
 	# rate like a door.
 	var eased := 1.0 - pow(1.0 - t, 3.0)
 	rig.rotation.x = _fall_way * (PI * 0.5) * eased
-	# And he sinks as he goes: the model pivots about its SOLES, so rotating it alone
-	# leaves him lying a metre above the plate standing on his own heels.
-	rig.position.y = -sin(absf(rig.rotation.x)) * 0.85
+	# NO SINKING. The model pivots about its SOLES, so rotating it a quarter turn about
+	# that point already lays the body flat AT floor level — the feet stay put and the head
+	# swings down to meet the ground. Pushing it down as well buried him, which is why only
+	# his limbs were showing: "oni są pod mapą i widać ich kończyny tylko".
+	rig.position.y = sin(absf(rig.rotation.x)) * 0.12
 
 func _die(from: Vector3) -> void:
 	state = DOWN
@@ -474,7 +476,10 @@ func _face(delta: float) -> void:
 	to.y = 0.0
 	if to.length_squared() < 1e-4:
 		return
-	var want := atan2(to.x, to.z)
+	# NEGATED, both of them. A Node3D faces its own -Z, so the yaw that points it along
+	# `to` is atan2(-to.x, -to.z); atan2(to.x, to.z) is that plus a half turn, which aims
+	# him exactly away from you. Every thug in the game walked at the player backwards.
+	var want := atan2(-to.x, -to.z)
 	rotation.y = lerp_angle(rotation.y, want, 1.0 - exp(-delta * 7.0))
 
 func _pose(delta: float) -> void:

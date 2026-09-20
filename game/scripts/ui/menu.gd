@@ -21,8 +21,19 @@ signal closed
 signal armor_chosen(id: String)
 signal hero_chosen(id: String)
 
-const CYAN := Color(0.55, 0.88, 1.0)
-const AMBER := Color(1.0, 0.72, 0.28)
+## Same two colours as the HUD, swapped by the same call — the menu is the same piece of
+## glass and looked absurd staying Stark blue inside a red mask.
+var CYAN := Color(0.55, 0.88, 1.0)
+var AMBER := Color(1.0, 0.72, 0.28)
+
+func use_palette(which: String) -> void:
+	if which == "spider":
+		CYAN = Color(1.0, 0.34, 0.32)
+		AMBER = Color(1.0, 0.88, 0.84)
+	else:
+		CYAN = Color(0.55, 0.88, 1.0)
+		AMBER = Color(1.0, 0.72, 0.28)
+	queue_redraw()
 const DIM := Color(0.45, 0.58, 0.68)
 const LOCKED := Color(0.38, 0.42, 0.48)
 

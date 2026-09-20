@@ -73,7 +73,23 @@ var _throw := { "R": 0.0, "L": 0.0 }
 var _held := { "R": false, "L": false }
 var _buffer := { "R": 0.0, "L": 0.0 }
 var _swing_hand := "L"
+## WEB FLUID, and it actually runs out. Jurek: "zrób, żeby temu Spider-Manowi jakby
+## naprawdę się zużywały te strzały." The HUD has drawn two tanks since the day he got
+## one; until now they were decoration that read "full" forever.
+##
+## Generous on purpose — running dry mid-swing is a death sentence, not a decision — so
+## the cost is on THROWN webs and the tanks refill quickly.
+const WEB_MAX := 24.0
+const WEB_PER_SHOT := 1.0
+const WEB_PER_SWING := 0.5
+const WEB_REFILL := 3.2
+var web_fluid := { "R": WEB_MAX, "L": WEB_MAX }
 var _whoosh := 0.35
+## How long the wind-up has been going, and how fast he turns during it.
+var _wind := 0.0
+const SPIN_RATE := 9.0
+## How far away a thug can be and still be the one it goes to.
+const HURL_RANGE := 55.0
 var _last_step := 0
 ## What he is carrying, if anything.
 var carried: Prop = null
@@ -130,6 +146,8 @@ func _ready() -> void:
 		visor.menu.opened.connect(func(): _feed_roster())
 		_feed_roster()
 		# He is not wearing an armour, so the panels must not claim he is.
+		visor.hud.use_palette("spider")
+		visor.menu.use_palette("spider")
 		visor.hud.set_armor_name("IRON SPIDER")
 		visor.hud.ammo_label = "WEB FLUID"
 		visor.hud.ammo_rows = ["L", "R"]
@@ -183,26 +201,38 @@ func _physics_process(delta: float) -> void:
 	aiming = Pad.retro() > TRIGGER_FIRE
 	Engine.time_scale = AIM_TIME_SCALE if aiming else 1.0
 
-	# BOTH BUMPERS TOGETHER PICK THINGS UP. Held, not tapped, and checked before the
-	# single-bumper web throws below — otherwise grabbing something would always fire two
-	# webs on the way. Jurek: "jak się przytrzyma R1 i L1, to powinno być rzucanie
-	# rzeczami, ale tylko jak coś jest jakby na ekranie."
+	# BOTH BUMPERS: WEB IT, SPIN, THROW IT AT SOMEBODY.
+	#
+	# Jurek's description, which the first cut got wrong in every part: "żeby strzelał
+	# siecią w ten kosz na śmieci z dwóch rąk i zaczął się tak kręcić i po prostu jak się
+	# puszcza, to wtedy to rzuca w najbliższego barbarzyńcy, nawet jak jest za nim, to po
+	# prostu troszeczkę się obraca jeszcze i rzuca w niego."
+	#
+	# So: two lines, not two separate web shots; a wind-up you can see; and a release that
+	# FINDS a target rather than throwing where the camera happens to point. Checked before
+	# the single-bumper throws below, or grabbing would always fire two webs on the way in.
 	var both := Pad.pressed("fire_r") and Pad.pressed("fire_l")
 	if carried != null:
-		# Carried out in front, where it blocks nothing and reads as held.
-		var hold_at := model.position + (model.basis_ * Vector3(0, 0.35, -1.5))
-		carried.global_position = hold_at
+		_wind += delta
+		# The spin. Fast, and it is what says "this is charging" without a meter.
+		model.yaw += SPIN_RATE * delta
+		# Held out to the side at arm's length, swung round with him.
+		var swing := model.basis_ * Vector3(0.0, 0.6, -1.7)
+		carried.global_position = model.position + swing
 		if not both:
-			var throw_dir := -camera.global_transform.basis.z if camera != null else -model.basis_.z
-			carried.hurl(throw_dir)
-			carried = null
-			Rumble.hit(0.5, 0.3, 0.12)
+			_hurl_carried()
 		return
 	if both:
 		var got := _reach_for_prop()
 		if got != null:
 			carried = got
 			got.grab()
+			_wind = 0.0
+			# BOTH HANDS. The lines are cosmetic here — the prop is carried, not towed —
+			# but two of them is the whole read of the move.
+			for hand: String in ["R", "L"]:
+				_throw[hand] = 1.0
+			Sfx.play("thwip", model.position, -2.0)
 			Rumble.landing(0.2)
 			return
 
@@ -224,7 +254,11 @@ func _physics_process(delta: float) -> void:
 		_buffer[hand] = 0.0
 		var wrist := _web_point(hand)
 		var aim := -camera.global_transform.basis.z if camera != null else model.basis_ * Vector3(0, 0, -1)
+		if web_fluid[hand] < WEB_PER_SHOT:
+			Sfx.flat("repulsor_dry", -16.0)
+			continue
 		if shots.fire(hand, wrist, aim):
+			web_fluid[hand] -= WEB_PER_SHOT
 			_throw[hand] = 1.0
 			Rumble.hit(0.35, 0.2, 0.08)
 
@@ -342,6 +376,15 @@ func _physics_process(delta: float) -> void:
 		# through the landing is what turns a fold-away into a brace.
 		_brace = 0.55 + clampf(-fell / 40.0, 0.0, 1.0) * 0.45
 
+	for hand: String in ["R", "L"]:
+		web_fluid[hand] = minf(WEB_MAX, web_fluid[hand] + WEB_REFILL * delta)
+	if visor != null and visor.hud != null:
+		visor.hud.shots_max = int(WEB_MAX)
+		visor.hud.shots_l = int(web_fluid["L"])
+		visor.hud.shots_r = int(web_fluid["R"])
+		visor.hud.locked_l = web_fluid["L"] < WEB_PER_SHOT
+		visor.hud.locked_r = web_fluid["R"] < WEB_PER_SHOT
+
 	_update_threat_marks(delta)
 	# THE RUSH OF AIR. Only while actually carried by a line and actually quick, retriggered
 	# on a distance clock so it does not machine-gun at the bottom of an arc.
@@ -366,10 +409,8 @@ func _physics_process(delta: float) -> void:
 		camera.follow(delta, model.position, model.view_basis, model.speed, aiming, 120.0)
 	if visor != null and visor.hud != null:
 		visor.hud.feed(delta / maxf(0.05, Engine.time_scale), look, model.speed, health, aiming)
-		# A hand holding a web reads as spent; a free hand reads as loaded. Crude, and it is
-		# the only thing on that panel that means anything to him.
-		visor.hud.repulsor_l = 0.15 if tether["L"].state != WebTether.IDLE else 1.0
-		visor.hud.repulsor_r = 0.15 if tether["R"].state != WebTether.IDLE else 1.0
+		visor.hud.repulsor_l = web_fluid["L"] / WEB_MAX
+		visor.hud.repulsor_r = web_fluid["R"] / WEB_MAX
 
 ## HELD ON THE TRIGGERS. Jurek: "pod R2 powinna byc prawa siec, a pod L2 lewa siec."
 ##
@@ -428,7 +469,10 @@ func _fire_swing(hand: String) -> void:
 	var hit_at: Vector3 = target[1]
 	var node: Node3D = target[0]
 
+	if web_fluid[hand] < WEB_PER_SWING:
+		return
 	if node != null and t.fire(from, node, hit_at):
+		web_fluid[hand] -= WEB_PER_SWING
 		_throw[hand] = 1.0
 		Rumble.landing(0.25)
 		# AND IT CATCHES. A rope that simply goes taut leaves you hanging under the anchor;
@@ -592,7 +636,11 @@ func _exit_tree() -> void:
 ## `health` is a FRACTION, because the integrity bar has always drawn it as one — so the
 ## damage numbers in EnemyKinds, which are in points, are divided by the armour's total
 ## here rather than everywhere they are written.
-const MAX_HP := 100.0
+## TOUGHER THAN THE ARMOUR. Jurek: "zrób, żeby strój też mu wolniej się rozwalał, bo to
+## jest jakieś w ogóle nieporozumienie, że tak wszystko się szybko rozwala." He is harder
+## to hit than a suit hovering in the open, and a nanotech weave does not lose plates —
+## so the same rifle burst costs him a third of what it costs Tony.
+const MAX_HP := 260.0
 ## Seconds of grace after a hit lands. Without it a burst from a rifle at 120 Hz is one
 ## unbroken stream of damage and a crowd is instantly lethal.
 const HURT_GRACE := 0.12
@@ -670,4 +718,47 @@ func _reach_for_prop() -> Prop:
 			continue
 		best_d = d
 		best = pr
+	return best
+
+## Lets go of what he is carrying, at somebody. Turns to face them first, however far
+## round they are — that turn is the whole point of the move reading as aimed rather than
+## as dropped.
+func _hurl_carried() -> void:
+	if carried == null:
+		return
+	var prop := carried
+	carried = null
+	_wind = 0.0
+
+	var mark := _nearest_thug()
+	var dir: Vector3
+	if mark != null:
+		var to := (mark.global_position + Vector3(0, 0.9, 0)) - prop.global_position
+		dir = to.normalized()
+		# Snap round to look at him. Not lerped: the throw happens on this frame, and a
+		# body still rotating towards a thing it has already thrown at reads as a bug.
+		var flat := Vector3(to.x, 0.0, to.z)
+		if flat.length_squared() > 1e-4:
+			model.yaw = atan2(-flat.x, -flat.z)
+	else:
+		dir = -camera.global_transform.basis.z if camera != null else -model.basis_.z
+	prop.hurl(dir)
+	Sfx.play("punch_big", model.position, -2.0, 0.9)
+	Rumble.hit(0.6, 0.35, 0.14)
+
+## Nearest man still on his feet, in ANY direction — behind counts, which is what makes the
+## turn worth having.
+func _nearest_thug() -> Enemy:
+	var best: Enemy = null
+	var best_d := HURL_RANGE
+	for n in get_tree().get_nodes_in_group("enemy"):
+		if not (n is Enemy) or not is_instance_valid(n):
+			continue
+		var e: Enemy = n
+		if e.state == Enemy.DOWN:
+			continue
+		var d := model.position.distance_to(e.global_position)
+		if d < best_d:
+			best_d = d
+			best = e
 	return best

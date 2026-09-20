@@ -24,6 +24,8 @@ var _frame: MeshInstance3D
 var _beep: AudioStreamPlayer3D
 var _beep_t := 0.0
 var _t := 0.0
+var _flicker := 0.0
+var _neon := 1.0
 var _built := false
 
 func build() -> void:
@@ -65,26 +67,31 @@ static func _unshaded(c: Color) -> StandardMaterial3D:
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
 	return m
 
-## Three arcs radiating from a point — the shape everyone reads as "danger, behind you",
-## without borrowing anything trademarked.
+## THREE LINES OUT OF THE HEAD. Jurek: "teraz ten Spider Sense wygląda jak znak Wi-Fi, a
+## to powinny być bardziej takie trzy linie, które wychodzą z głowy jakby na zewnątrz."
+##
+## He was right — nested arcs ARE the wi-fi glyph, and a wi-fi glyph over a man's head
+## means his reception is good. Three straight tapered strokes fanning upward and outward
+## say "something is coming" instead, and they are also far cheaper to animate: the
+## flicker is per-stroke, which is what makes it feel electrical rather than pulsed.
+const SENSE_LINES := 3
 static func _sense_mesh() -> ArrayMesh:
 	var im := ImmediateMesh.new()
 	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
-	for ring in 3:
-		var r0 := 0.16 + ring * 0.13
-		var r1 := r0 + 0.07
-		var steps := 14
-		for i in steps:
-			# A broken arc, not a circle: gaps are what make it read as a signal.
-			var a0 := PI * 0.18 + float(i) / steps * PI * 0.64
-			var a1 := PI * 0.18 + float(i + 1) / steps * PI * 0.64
-			for mirror: float in [1.0, -1.0]:
-				var p00 := Vector3(cos(a0) * r0 * mirror, sin(a0) * r0, 0)
-				var p01 := Vector3(cos(a1) * r0 * mirror, sin(a1) * r0, 0)
-				var p10 := Vector3(cos(a0) * r1 * mirror, sin(a0) * r1, 0)
-				var p11 := Vector3(cos(a1) * r1 * mirror, sin(a1) * r1, 0)
-				im.surface_add_vertex(p00); im.surface_add_vertex(p10); im.surface_add_vertex(p11)
-				im.surface_add_vertex(p00); im.surface_add_vertex(p11); im.surface_add_vertex(p01)
+	for i in SENSE_LINES:
+		# Fanned across the top: one straight up, one out to each side.
+		var a := PI * 0.5 + (float(i) - (SENSE_LINES - 1) * 0.5) * 0.62
+		var d := Vector3(cos(a), sin(a), 0)
+		var n := Vector3(-d.y, d.x, 0)
+		var r0 := 0.14
+		var r1 := 0.46
+		# Tapered: wide at the head, sharp at the tip, like a spark leaving something.
+		var w0 := 0.052
+		var w1 := 0.012
+		var p0 := d * r0
+		var p1 := d * r1
+		im.surface_add_vertex(p0 - n * w0); im.surface_add_vertex(p1 - n * w1); im.surface_add_vertex(p1 + n * w1)
+		im.surface_add_vertex(p0 - n * w0); im.surface_add_vertex(p1 + n * w1); im.surface_add_vertex(p0 + n * w0)
 	im.surface_end()
 	var am := ArrayMesh.new()
 	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, im.surface_get_arrays(0))
@@ -120,9 +127,18 @@ func _process(delta: float) -> void:
 	_t += delta
 
 	# The spider-sense pulses. A steady glyph is furniture; one that ticks is an alarm.
-	var pulse := 0.55 + 0.45 * sin(_t * 12.0)
+	# NEON, not a sine. A clean pulse reads as a UI element with a timer on it; a strip
+	# light starting has an irregular stutter, and that is what says "electrical".
+	_flicker -= delta
+	if _flicker <= 0.0:
+		_flicker = randf_range(0.03, 0.13)
+		_neon = randf_range(0.45, 1.0)
+		if randf() < 0.14:
+			_neon = 0.12                 # the occasional dropout, which sells the rest
 	var sm: StandardMaterial3D = _sense.material_override
-	sm.albedo_color = Color(1.0, 0.92, 0.35, sense_on * pulse * 0.95)
+	# Cyan-white rather than yellow: the warning has to be legible against the armour's
+	# amber and the thugs' orange tracer fire, and nothing else in the game is this colour.
+	sm.albedo_color = Color(0.55, 0.95, 1.0, sense_on * _neon)
 	_sense.visible = sense_on > 0.01
 	_sense.scale = Vector3.ONE * (0.9 + 0.25 * sense_on)
 

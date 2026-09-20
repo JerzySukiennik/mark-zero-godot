@@ -274,8 +274,14 @@ func _ready() -> void:
 	if is_instance_valid(doomed):
 		_ok(absf(doomed.rig.rotation.x - upright) > 1.2,
 			"a dead man goes over (%.0f deg)" % rad_to_deg(absf(doomed.rig.rotation.x)))
-		_ok(doomed.rig.position.y < -0.4,
-			"and lies on the plate rather than on his heels (%.2f m)" % doomed.rig.position.y)
+		# THE HEAD, not the rig's offset. The old assertion demanded that the rig be pushed
+		# DOWN, which is exactly the bug that buried them under the plate with only their
+		# limbs showing — a test can encode a mistake as firmly as the code can. What
+		# actually matters is that a dead man is lying down and still above the floor.
+		var head: Node3D = doomed.skel.pivots["piv_head"]
+		var head_y: float = head.global_position.y - doomed.global_position.y
+		_ok(head_y < 0.75, "his head is down where a lying man's head is (%.2f m)" % head_y)
+		_ok(head_y > -0.35, "and he is not buried in the plate (%.2f m)" % head_y)
 
 	print("=== the shot bends towards him ===")
 	# Bullet magnetism, the technique every console shooter has used since Halo. A bolt

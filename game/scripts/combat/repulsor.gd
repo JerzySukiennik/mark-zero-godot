@@ -55,9 +55,11 @@ const DAMAGE := 12.0
 ## missed, at 8 to 1.12 m and still missed, at 18 it lands, and past that nothing improves
 ## because the residual is the lateral offset at the instant it goes by. Twenty, with the
 ## margin on the right side of the cliff.
-const MAGNET_TURN := 20.0
+const MAGNET_TURN := 11.0
 ## Bolts only bend for something they were already roughly aimed at.
-const MAGNET_CONE := 0.978
+## Tightened with the rest of the assist: a bolt still bends for a shot that was nearly
+## right, and no longer for one that was not.
+const MAGNET_CONE := 0.991
 
 signal fired(hand: String)
 

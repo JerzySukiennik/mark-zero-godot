@@ -11,9 +11,31 @@ extends Control
 ## the head by a few pixels belongs to a helmet the head is moving inside. Driven off the
 ## suit's turn rate, tiny, and it is the cheapest part of the whole illusion.
 
-const AMBER := Color(1.0, 0.72, 0.28)
-const CYAN := Color(0.55, 0.88, 1.0)
-const RED := Color(1.0, 0.36, 0.30)
+## THE ARMOUR'S PALETTE, and Spider-Man's. Jurek: "zmień HUD Spider-Mana na taki jakby
+## Spider-Manowy, czyli taki czerwony, trochę mniej Tony Stark."
+##
+## Variables rather than constants so one call swaps the whole interface. Every panel in
+## this file already draws through AMBER and CYAN, so the theme is two assignments and
+## nothing else has to know it happened.
+var AMBER := Color(1.0, 0.72, 0.28)
+var CYAN := Color(0.55, 0.88, 1.0)
+var RED := Color(1.0, 0.36, 0.30)
+
+## "stark" or "spider". NOT called set_theme: Control already has one taking a Theme
+## resource, and shadowing an engine method that the engine itself calls is a trap laid
+## for whoever reads this next.
+func use_palette(which: String) -> void:
+	if which == "spider":
+		# Crimson and web-white — his own colours, and deliberately not the armour's
+		# instrument cyan, which is the whole of the complaint.
+		CYAN = Color(1.0, 0.34, 0.32)
+		AMBER = Color(1.0, 0.88, 0.84)
+		RED = Color(1.0, 0.24, 0.22)
+	else:
+		CYAN = Color(0.55, 0.88, 1.0)
+		AMBER = Color(1.0, 0.72, 0.28)
+		RED = Color(1.0, 0.36, 0.30)
+	queue_redraw()
 
 ## How far the HUD lags the head, in pixels at full turn rate.
 const SWAY := 26.0

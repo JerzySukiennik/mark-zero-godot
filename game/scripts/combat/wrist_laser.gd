@@ -38,7 +38,9 @@ const CHARGE_COST := 1.0
 ## session short enough to be called a playtest — "nie dziala tez to trojkat z kolkiem" was
 ## the button working perfectly and the charge never arriving. Eight seconds still makes it
 ## the rarest thing on the pad without making it fiction.
-const TRICKLE := 0.125
+## Eight seconds from empty was long enough that a second use never happened inside one
+## fight, and "it did nothing" is what an unavailable weapon looks like from the pad.
+const TRICKLE := 0.20
 
 ## FULL AT SPAWN. The first press of a weapon has to do something, or the player concludes
 ## the binding is broken and stops pressing it — and then never finds out it works.

@@ -9,10 +9,15 @@ extends StaticBody3D
 ## what makes them work for a second prop without any extra bookkeeping.
 
 ## How close the player has to be for it to offer itself.
-const NOTICE := 9.0
+## CLOSE. It was nine metres, which put a prompt on a bin most of a street away — Jurek:
+## "to nie powinno być widoczne nawet jak się jest daleko". Four is arm's reach plus a
+## step, which is when the offer is actually relevant.
+const NOTICE := 4.2
 ## What it does to whoever it lands on, and how fast it leaves the hand.
-const DAMAGE := 26.0
-const THROW_SPEED := 38.0
+## Enough to kill an ordinary thug outright, because that is what Jurek described: "rzuca
+## w niego i to go zabija". A brute survives it, which is the point of a brute.
+const DAMAGE := 60.0
+const THROW_SPEED := 46.0
 const GRAVITY := 20.0
 
 enum { RESTING, HELD, FLYING }
@@ -21,7 +26,7 @@ var state := RESTING
 var ground_y := 0.0
 var _vel := Vector3.ZERO
 var _mesh: MeshInstance3D
-var _label: Label3D
+var _label: ButtonPrompt
 var _glow := 0.0
 
 func _ready() -> void:
@@ -64,19 +69,9 @@ func _build() -> void:
 	cs.position.y = 0.475
 	add_child(cs)
 
-	# The prompt. A Label3D because it has to sit in the world and stay readable from any
-	# angle — the same thing on the HUD would need to know where the prop is on screen,
-	# which is a projection problem nobody needs to have.
-	_label = Label3D.new()
-	_label.text = "L1 + R1"
-	_label.font_size = 64
-	_label.pixel_size = 0.0032
-	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	_label.no_depth_test = true
-	_label.modulate = Color(1, 1, 1, 0)
-	_label.outline_size = 16
-	_label.outline_modulate = Color(0, 0, 0, 0.85)
-	_label.position.y = 1.45
+	# BUTTON ICONS, not a line of text. See scripts/ui/button_prompt.gd.
+	_label = ButtonPrompt.new(["L1", "+", "R1"])
+	_label.position.y = 1.5
 	add_child(_label)
 
 ## Picked up. It stops being solid so the player does not trip over what he is carrying.
@@ -101,12 +96,12 @@ func _physics_process(delta: float) -> void:
 	var want := 0.0
 	if state == RESTING and player != null:
 		var d := global_position.distance_to(player.global_position)
-		want = clampf(1.0 - (d - NOTICE * 0.55) / (NOTICE * 0.45), 0.0, 1.0)
+		want = clampf(1.0 - (d - NOTICE * 0.7) / (NOTICE * 0.3), 0.0, 1.0)
 	_glow = move_toward(_glow, want, delta * 5.0)
 	var mat: StandardMaterial3D = _mesh.material_override
 	var edge: StandardMaterial3D = mat.next_pass
 	edge.albedo_color = Color(1, 1, 1, _glow * 0.9)
-	_label.modulate = Color(1, 1, 1, _glow)
+	_label.show_at(_glow)
 
 	match state:
 		HELD:
