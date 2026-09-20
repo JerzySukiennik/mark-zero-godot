@@ -120,6 +120,13 @@ static func _polish(n: Node) -> void:
 				var m = mesh.surface_get_material(i)
 				if m is StandardMaterial3D:
 					var sm: StandardMaterial3D = m
+					# BACK FACES OFF. Every plate arrives double-sided, so the camera was
+					# seeing the INSIDE of the far side of the shell through the near
+					# side — which reads exactly as a figure made of glass. Jurek: "nie
+					# zrobiłeś w środku człowieka, czyli nie widać, tylko jest po prostu
+					# przezroczyste." Nothing was transparent; every material measured
+					# alpha 1.0. It was culling.
+					sm.cull_mode = BaseMaterial3D.CULL_BACK
 					sm.roughness = minf(sm.roughness, MAX_ROUGHNESS)
 					sm.metallic_specular = maxf(sm.metallic_specular, MIN_SPECULAR)
 					if sm.albedo_texture != null:

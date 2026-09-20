@@ -29,6 +29,11 @@ func _ready() -> void:
 	squad = Squad.new()
 	squad.setup(stage)
 	add_child(squad)
+	# Escape, and the way out of the game.
+	var pause := PauseMenu.new()
+	pause.name = "PauseMenu"
+	add_child(pause)
+
 	_sky()
 	# DEFERRED. Switching hero frees the entity whose own menu emitted the change, from
 	# inside that signal; rebuilding the roster on the next idle frame keeps the teardown
