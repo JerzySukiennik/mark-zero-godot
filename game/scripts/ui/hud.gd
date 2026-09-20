@@ -38,6 +38,8 @@ var shots_r := 16
 var shots_max := 16
 var locked_l := false
 var locked_r := false
+## True while the crosshair is over someone. Fed by the suit; the HUD does not look.
+var target_locked := false
 ## Kept, though nothing draws it any more: the arena still feeds it and a threat readout
 ## is the obvious thing to want back once there is a reason for one. Jurek had it removed
 ## as soon as he could see the thugs themselves, which is the right call — a number on the
@@ -149,8 +151,11 @@ func _draw() -> void:
 ## without covering what it is pointing at — and it grows a little when the aim trigger is
 ## held, so the mode is still legible.
 func _reticle(c: Vector2, u: float) -> void:
-	var col := Color(CYAN.r, CYAN.g, CYAN.b, 0.55 + 0.35 * _aiming)
-	var r := lerpf(16.0, 26.0, _aiming) * u
+	# AMBER AND TIGHT when it is over someone. Telling the player which man the game thinks
+	# he means is half of what makes assistance feel like help rather than interference.
+	var col := Color(AMBER.r, AMBER.g, AMBER.b, 0.95) if target_locked \
+		else Color(CYAN.r, CYAN.g, CYAN.b, 0.55 + 0.35 * _aiming)
+	var r := lerpf(16.0, 26.0, _aiming) * u * (0.72 if target_locked else 1.0)
 	var arm := lerpf(7.0, 11.0, _aiming) * u
 	var w := maxf(1.0, 1.6 * u)
 	for i in 4:

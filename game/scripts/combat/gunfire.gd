@@ -16,6 +16,8 @@ const LIFE := 4.0
 ## Rockets are slow and obvious on purpose: they are the one incoming thing you are meant
 ## to have time to dodge.
 const ROCKET_TRAIL := 0.045
+## How sharply a rocket can turn, as a fraction of the angle per second.
+const ROCKET_TURN := 1.25
 
 signal hit_player(amount: float, at: Vector3)
 
@@ -27,6 +29,10 @@ class Round:
 	var damage := 0.0
 	var blast := 0.0
 	var rocket := false
+	## Rockets chase. Bullets do not, and never will — a bullet you cannot outrun is not a
+	## threat the player can answer.
+	var chase: Node3D = null
+	var launched := 0.0
 
 var _pool: Array[Round] = []
 var _built := false
@@ -68,7 +74,11 @@ func _take() -> Round:
 
 ## Fires one. `damage` is what it does on a direct hit; a non-zero `blast` makes it a
 ## rocket, which also hurts anything close to where it lands.
-func fire(from: Vector3, dir: Vector3, speed: float, damage: float, blast := 0.0) -> bool:
+## `chase` is only honoured by rockets. Jurek: "jak jest wystrzelony RPG, to on powinien
+## jakby gonić za tym Spidermanem albo Iron Manem" — slow, obvious and persistent, so the
+## answer is to move rather than to have been standing somewhere else.
+func fire(from: Vector3, dir: Vector3, speed: float, damage: float, blast := 0.0,
+		chase: Node3D = null) -> bool:
 	var r := _take()
 	if r == null:
 		return false
@@ -78,6 +88,8 @@ func fire(from: Vector3, dir: Vector3, speed: float, damage: float, blast := 0.0
 	r.damage = damage
 	r.blast = blast
 	r.rocket = blast > 0.0
+	r.chase = chase if r.rocket else null
+	r.launched = 0.0
 	r.node.visible = true
 	r.node.global_position = from
 	var m: StandardMaterial3D = r.node.material_override
@@ -94,7 +106,18 @@ func _physics_process(delta: float) -> void:
 			continue
 		r.life -= delta
 		if r.rocket:
+			r.launched += delta
 			r.vel.y -= 3.0 * delta          # a slight droop, so an RPG arcs
+			# STEERING, and weakly. A rocket that turns hard is unavoidable and therefore
+			# not a mechanic; one that turns slowly has to be out-manoeuvred, which is the
+			# only interesting version. It also only starts steering after a beat, so
+			# walking two metres sideways at the moment of firing does not beat it.
+			if r.chase != null and is_instance_valid(r.chase) and r.launched > 0.35:
+				var want := (r.chase.global_position + Vector3(0, 0.7, 0)) - r.node.global_position
+				if want.length_squared() > 1e-4:
+					var sp := r.vel.length()
+					r.vel = r.vel.normalized().slerp(want.normalized(),
+						clampf(ROCKET_TURN * delta, 0.0, 1.0)) * sp
 		var from := r.node.global_position
 		var to := from + r.vel * delta
 
@@ -166,3 +189,18 @@ func _shout(at: Vector3, _amount: float, radius: float) -> void:
 	var tw := create_tween()
 	tw.tween_property(l, "light_energy", 0.0, 0.35)
 	tw.tween_callback(l.queue_free)
+
+## Is anything tracking `who`, and how close is it? Returns -1 when nothing is, and 0..1
+## as it closes, which is what drives the bracket and the beeping.
+func lock_on(who: Node3D) -> float:
+	if who == null:
+		return -1.0
+	var best := -1.0
+	for r: Round in _pool:
+		if not r.live or not r.rocket or r.chase != who:
+			continue
+		var d: float = r.node.global_position.distance_to(who.global_position)
+		# Sixty metres is about as far as one is ever fired from, so that is full scale.
+		var near: float = clampf(1.0 - d / 60.0, 0.0, 1.0)
+		best = maxf(best, near)
+	return best

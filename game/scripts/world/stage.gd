@@ -32,6 +32,7 @@ func build() -> void:
 	_plate()
 	_grid()
 	_towers()
+	_props()
 
 ## ONE building. Not a city — the plate is still the point — but Spider-Man cannot swing
 ## off nothing, and a web fired into an empty sky is a mechanic with no world to use it on.
@@ -169,3 +170,15 @@ func _grid() -> void:
 	mi.mesh = st.commit()
 	mi.name = "Grid"
 	add_child(mi)
+
+## A couple of things to throw, by the spawn. Jurek asked for one bin to prove the
+## mechanic; two is barely more work and stops the first throw ending the feature.
+const PROPS := [Vector3(6, 0, -4), Vector3(-5, 0, -7), Vector3(11, 0, -12)]
+
+func _props() -> void:
+	for at: Vector3 in PROPS:
+		var p := Prop.new()
+		p.name = "Prop"
+		p.ground_y = GROUND_Y
+		add_child(p)
+		p.position = Vector3(at.x, GROUND_Y, at.z)

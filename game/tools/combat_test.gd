@@ -29,6 +29,10 @@ class Dummy:
 
 var _floor: StaticBody3D
 
+## Repulsors live under the test node like everything else here.
+func root_add(n: Node) -> void:
+	add_child(n)
+
 func _make_floor() -> void:
 	_floor = StaticBody3D.new()
 	var cs := CollisionShape3D.new()
@@ -233,6 +237,66 @@ func _ready() -> void:
 	_ok(body.position.distance_to(before) > 1.5,
 		"moving him out of the way (%.1f m)" % body.position.distance_to(before))
 	_ok(fist.damage_scale() == 1.0, "and it ends")
+
+	print("=== warnings before the shot ===")
+	# A warning that arrives with the bullet is not a warning. The rifleman aims first, and
+	# says so, which is what the spider-sense over Spider-Man's head is reading.
+	var teller := _spawn("rifle", Vector3(40, 1, -30.0), guns)
+	hero.global_position = Vector3(40, 1, 0)
+	await get_tree().physics_frame
+	var saw_tell := false
+	var tell_before_shot := true
+	var rounds_before := hero.hits
+	for i in 700:
+		await get_tree().physics_frame
+		if teller.telegraphing() > 0.0:
+			saw_tell = true
+		if hero.hits > rounds_before and not saw_tell:
+			tell_before_shot = false
+			break
+		if hero.hits > rounds_before:
+			break
+	_ok(saw_tell, "he takes aim visibly before firing")
+	_ok(tell_before_shot, "and the warning comes BEFORE the round does")
+	teller.queue_free()
+	await _tick(2)
+
+	print("=== falling over ===")
+	var doomed := _spawn("brawler", Vector3(70, 1, 0), guns)
+	await get_tree().physics_frame
+	var upright: float = doomed.rig.rotation.x
+	while doomed.state != Enemy.DOWN:
+		doomed.take_hit(50.0, Vector3(78, 1, 0), "test")
+	for i in int(Enemy.TOPPLE_TIME * 120.0) + 30:
+		await get_tree().physics_frame
+		if not is_instance_valid(doomed):
+			break
+	if is_instance_valid(doomed):
+		_ok(absf(doomed.rig.rotation.x - upright) > 1.2,
+			"a dead man goes over (%.0f deg)" % rad_to_deg(absf(doomed.rig.rotation.x)))
+		_ok(doomed.rig.position.y < -0.4,
+			"and lies on the plate rather than on his heels (%.2f m)" % doomed.rig.position.y)
+
+	print("=== the shot bends towards him ===")
+	# Bullet magnetism, the technique every console shooter has used since Halo. A bolt
+	# fired a few degrees wide must still land, because at two hundred metres up a man is
+	# a few pixels and a thumbstick cannot do better than "a few degrees wide".
+	var mark4 := _spawn("brawler", Vector3(100, 1, -40.0), guns)
+	await get_tree().physics_frame
+	var rep := Repulsors.new()
+	root_add(rep)
+	rep.build()
+	var start := Vector3(100, 1.2, 0)
+	# Deliberately off: aimed a metre and a half to the side of a man forty metres away.
+	var wide := (mark4.global_position + Vector3(1.5, 0.9, 0)) - start
+	var hp_before: float = mark4.hp
+	rep.fire("R", start, start + wide.normalized() * 60.0, mark4)
+	for i in 120:
+		rep._physics_process(1.0 / 120.0)
+		await get_tree().physics_frame
+		if mark4.hp < hp_before:
+			break
+	_ok(mark4.hp < hp_before, "a shot aimed wide still lands (%.0f -> %.0f hp)" % [hp_before, mark4.hp])
 
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	get_tree().quit(1 if bad > 0 else 0)

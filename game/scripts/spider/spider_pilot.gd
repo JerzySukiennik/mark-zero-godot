@@ -54,6 +54,8 @@ var skel: SuitRig
 var camera: ChaseCamera
 var visor: Visor
 var health := 1.0
+var marks: ThreatMarks
+
 var legs := SpiderLegs.new()
 var poses := SpiderPoses.new()
 var fight := SpiderCombat.new()
@@ -71,6 +73,9 @@ var _throw := { "R": 0.0, "L": 0.0 }
 var _held := { "R": false, "L": false }
 var _buffer := { "R": 0.0, "L": 0.0 }
 var _swing_hand := "L"
+## What he is carrying, if anything.
+var carried: Prop = null
+const CARRY_RANGE := 9.0
 var _hops := MAX_HOPS
 ## Webs that landed this frame and still owe the player their pull into the arc.
 var _catch_pending := { "R": false, "L": false }
@@ -88,6 +93,10 @@ func setup(id: int, stage: Stage) -> void:
 func _ready() -> void:
 	add_to_group("player")
 	add_to_group("hittable")
+	marks = ThreatMarks.new()
+	marks.name = "ThreatMarks"
+	# In the WORLD, so the bracket does not inherit a body that banks and tumbles.
+	get_parent().call_deferred("add_child", marks)
 	# Something for incoming fire to hit; see scripts/combat/hurtbox.gd.
 	add_child(Hurtbox.new(self, 0.52, 1.85))
 	model = SpiderModel.new()
@@ -171,6 +180,29 @@ func _physics_process(delta: float) -> void:
 	# finger cannot both hold a rope and steady a shot.
 	aiming = Pad.retro() > TRIGGER_FIRE
 	Engine.time_scale = AIM_TIME_SCALE if aiming else 1.0
+
+	# BOTH BUMPERS TOGETHER PICK THINGS UP. Held, not tapped, and checked before the
+	# single-bumper web throws below — otherwise grabbing something would always fire two
+	# webs on the way. Jurek: "jak się przytrzyma R1 i L1, to powinno być rzucanie
+	# rzeczami, ale tylko jak coś jest jakby na ekranie."
+	var both := Pad.pressed("fire_r") and Pad.pressed("fire_l")
+	if carried != null:
+		# Carried out in front, where it blocks nothing and reads as held.
+		var hold_at := model.position + (model.basis_ * Vector3(0, 0.35, -1.5))
+		carried.global_position = hold_at
+		if not both:
+			var throw_dir := -camera.global_transform.basis.z if camera != null else -model.basis_.z
+			carried.hurl(throw_dir)
+			carried = null
+			Rumble.hit(0.5, 0.3, 0.12)
+		return
+	if both:
+		var got := _reach_for_prop()
+		if got != null:
+			carried = got
+			got.grab()
+			Rumble.landing(0.2)
+			return
 
 	# R1 AND L1 THROW A WEB. Separate from the triggers, which hold on to one: "R1... reka
 	# powinna tak strzelic... i to powinno z nadgarstka mu leciec takie i na scianie
@@ -306,6 +338,7 @@ func _physics_process(delta: float) -> void:
 		# through the landing is what turns a fold-away into a brace.
 		_brace = 0.55 + clampf(-fell / 40.0, 0.0, 1.0) * 0.45
 
+	_update_threat_marks(delta)
 	_draw_webs()
 
 	if camera != null:
@@ -562,3 +595,57 @@ func take_hit(amount: float, from: Vector3, kind := "") -> void:
 	push.y *= 0.3
 	if push.length_squared() > 1e-4 and model != null:
 		model.velocity += push.normalized() * amount * 0.06
+
+## THE TWO WARNINGS. Polled rather than wired through signals: enemies come and go by the
+## dozen and a connection per thug per frame is a lot of bookkeeping for something one
+## loop over a group answers exactly.
+func _update_threat_marks(delta: float) -> void:
+	if marks == null:
+		return
+	marks.global_position = global_position
+
+	# Spider-sense: is anything winding up on ME, and how soon. The closest tell wins, so
+	# a second man aiming does not reset the urgency of the first.
+	var soonest := -1.0
+	for n in get_tree().get_nodes_in_group("enemy"):
+		if not (n is Enemy) or not is_instance_valid(n):
+			continue
+		var e: Enemy = n
+		var tell: float = e.telegraphing()
+		if tell <= 0.0 or e._target != self:
+			continue
+		soonest = maxf(soonest, 1.0 - clampf(tell / Enemy.AIM_TELL, 0.0, 1.0))
+	marks.sense_on = move_toward(marks.sense_on, maxf(0.0, soonest), delta * 6.0)
+
+	# And the bracket, for a rocket that is actually chasing this body.
+	var near := -1.0
+	for n in get_tree().get_nodes_in_group("gunfire"):
+		if n is Gunfire:
+			near = maxf(near, (n as Gunfire).lock_on(self))
+	marks.locked = near >= 0.0
+	marks.lock_near = maxf(0.0, near)
+
+## The nearest prop worth grabbing: close, and roughly in front. "Only when something is
+## on screen" is the rule, and in front of the camera is the honest reading of it.
+func _reach_for_prop() -> Prop:
+	var eye := camera.global_position if camera != null else model.position
+	var aim := -camera.global_transform.basis.z if camera != null else -model.basis_.z
+	var best: Prop = null
+	var best_d := CARRY_RANGE
+	for n in get_tree().get_nodes_in_group("prop"):
+		if not (n is Prop) or not is_instance_valid(n):
+			continue
+		var pr: Prop = n
+		if pr.state != Prop.RESTING:
+			continue
+		var to := pr.global_position - model.position
+		var d := to.length()
+		if d > best_d:
+			continue
+		# In front of the camera, not merely nearby — reaching backwards through your own
+		# shoulder for a bin you cannot see is not a pickup, it is telekinesis.
+		if aim.dot((pr.global_position - eye).normalized()) < 0.35:
+			continue
+		best_d = d
+		best = pr
+	return best

@@ -52,6 +52,20 @@ var _burst_gap := 0.0
 var _stride := 0.0
 var _hurt_flash := 0.0
 var _juggle := 0.0
+var _telegraph := 0.0
+var _fall_way := 1.0
+
+## How long he takes aim before firing, and the longer beat an RPG gets.
+const AIM_TELL := 0.85
+const ROCKET_TELL := 1.35
+
+## Is he winding up on you right now, and how long is left?
+func telegraphing() -> float:
+	return _telegraph
+
+## Is the thing he is about to throw a rocket?
+func telegraph_is_rocket() -> bool:
+	return _telegraph > 0.0 and bool(spec.get("rocket", false))
 var _mood := PRESS
 var _mind := 0.0
 var _drift := 1.0
@@ -172,6 +186,7 @@ func take_hit(amount: float, from: Vector3, _kind := "") -> void:
 	if state != WEBBED:
 		state = STAGGER
 		_stagger = STAGGER_TIME
+		_telegraph = 0.0
 
 ## A web landing on him. THE BIG ONES TAKE MORE, which is the whole reason the brute is in
 ## the game: "duzych (ktorych spiderman trudniej zwiazac)". One flick glues a thug; a brute
@@ -184,6 +199,7 @@ func web_hit(amount := 1.0) -> void:
 		webbing = 0.0
 		state = WEBBED
 		glued = WEB_TIME
+		_telegraph = 0.0
 		velocity = Vector3.ZERO
 
 ## KNOCKED INTO THE AIR, and held there. Jurek's launcher: Spider-Man punches a man
@@ -213,9 +229,34 @@ func juggle(up: float) -> void:
 func is_juggled() -> bool:
 	return _juggle > 0.0
 
+## FALLING OVER. Jurek: "nawet nie ma animacji zabicia." The `down` pose folds the limbs
+## and that is half of it; the other half is that a dead man does not stay standing, and
+## the body has to go from vertical to flat where the player can see it happen.
+##
+## A rotation rather than a ragdoll. A ragdoll is a physics body, a solver and a pile of
+## tuning, and what it buys over a half-second topple is variety in a thing the player
+## looks at once. This is honest about what it is.
+const TOPPLE_TIME := 0.55
+
+func _topple(delta: float) -> void:
+	if rig == null:
+		return
+	var t: float = clampf(_dead_for / TOPPLE_TIME, 0.0, 1.0)
+	# Eased out, so he goes over quickly and settles rather than rotating at a constant
+	# rate like a door.
+	var eased := 1.0 - pow(1.0 - t, 3.0)
+	rig.rotation.x = _fall_way * (PI * 0.5) * eased
+	# And he sinks as he goes: the model pivots about its SOLES, so rotating it alone
+	# leaves him lying a metre above the plate standing on his own heels.
+	rig.position.y = -sin(absf(rig.rotation.x)) * 0.85
+
 func _die(from: Vector3) -> void:
 	state = DOWN
 	_dead_for = 0.0
+	# Forwards or backwards depending on which way he was hit, which is the one bit of
+	# variety that costs nothing and reads immediately.
+	var facing := global_transform.basis * Vector3(0, 0, -1)
+	_fall_way = -1.0 if facing.dot((global_position - from).normalized()) > 0.0 else 1.0
 	var push := (global_position - from)
 	push.y = 0.0
 	if push.length_squared() > 1e-4:
@@ -231,6 +272,7 @@ func _physics_process(delta: float) -> void:
 	if state == DOWN:
 		_dead_for += delta
 		_fall(delta)
+		_topple(delta)
 		if _dead_for > CORPSE_TIME:
 			queue_free()
 		_pose(delta)
@@ -364,15 +406,28 @@ func _fight(delta: float) -> void:
 			_burst_gap = 0.09
 		return
 
+	# THE TELEGRAPH. He shoulders the weapon and aims before anything comes out, and says
+	# so — Jurek wants a second of warning above Spider-Man's head, and a warning that
+	# arrives with the bullet is not a warning.
+	if _telegraph > 0.0:
+		_telegraph -= delta
+		velocity.x = move_toward(velocity.x, 0.0, 20.0 * delta)
+		velocity.z = move_toward(velocity.z, 0.0, 20.0 * delta)
+		if _telegraph <= 0.0:
+			_burst = int(spec["burst"])
+			_burst_gap = 0.0
+		return
+
 	if in_range and _cool <= 0.0:
 		if spec["ranged"]:
 			# VOLLEYS. They fired at their own rate forever, which is a hose rather than a
 			# fight — Jurek: "oni nie powinni strzelać non stop, tylko w takich falach co
 			# pięć sekund". A burst, then a long enough gap to move in it.
 			_cool = float(spec["volley"]) * randf_range(0.82, 1.18)
-			_burst = int(spec["burst"])
-			_burst_gap = 0.0
-			warned.emit(self, _burst_gap)
+			# A rocket is announced for longer than a rifle, because it is the one thing
+			# you are meant to get out of the way of rather than tank.
+			_telegraph = ROCKET_TELL if spec["rocket"] else AIM_TELL
+			warned.emit(self, _telegraph)
 		else:
 			_cool = float(spec["rate"])
 			_swing()
@@ -401,7 +456,8 @@ func _shoot() -> void:
 	aim = (aim + Vector3(randf_range(-sp, sp), randf_range(-sp, sp), randf_range(-sp, sp))).normalized()
 	poses.strike()
 	guns.fire(muzzle, aim, float(spec["muzzle_speed"]), float(spec["damage"]),
-		float(spec["blast"]) if spec["rocket"] else 0.0)
+		float(spec["blast"]) if spec["rocket"] else 0.0,
+		_target if spec["rocket"] else null)
 
 ## Turns to face what he is fighting. Only the body — nothing here pitches.
 func _face(delta: float) -> void:

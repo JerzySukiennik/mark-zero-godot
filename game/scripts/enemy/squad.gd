@@ -48,6 +48,7 @@ func _ready() -> void:
 	name = "Squad"
 	guns = Gunfire.new()
 	guns.name = "Gunfire"
+	guns.add_to_group("gunfire")
 	# In the WORLD, not on a thug: a round already in the air has to outlive whoever fired
 	# it, and every one of them is on a twelve second timer.
 	add_child(guns)

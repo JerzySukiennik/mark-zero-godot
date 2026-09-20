@@ -279,5 +279,38 @@ func _ready() -> void:
 			misses += 1        # spawned, but with no body — which looks the same from the pad
 	_ok(misses == 0, "eight switches in a row, all of them took (%d missed)" % misses)
 
+	print("=== the suit comes apart ===")
+	# Last in the file on purpose: it ends with the armour destroyed and Tony standing in
+	# the wreckage, which is not a state any other assertion wants to inherit.
+	var wreck = arena.suits.get(1)
+	if wreck is SuitPilot:
+		var sp3: SuitPilot = wreck
+		if sp3.visor != null and sp3.visor.menu != null and sp3.visor.menu.is_open:
+			sp3.visor.menu.close()
+		sp3.health = 1.0
+		sp3.stripped = false
+		await get_tree().process_frame
+		_ok(sp3.armour != null and sp3.armour.shed_count == 0, "a fresh suit is whole")
+
+		# Half the bar should cost about half the plates.
+		sp3.health = 0.5
+		sp3.armour.sync(sp3.health)
+		await get_tree().process_frame
+		_ok(sp3.armour.shed_count > 6,
+			"half the integrity sheds a lot of it (%d pieces)" % sp3.armour.shed_count)
+		# AND THE COST IS REAL. Losing an arm has to take a weapon with it, or the damage
+		# is decoration: "jak odpada kawałek ręki, to już nie może strzelać prawą ręką".
+		var armless := (not sp3.armour.can_use("R")) or (not sp3.armour.can_use("L"))
+		_ok(armless, "and by then an arm has stopped working")
+
+		sp3.health = 0.0
+		sp3.armour.sync(0.0)
+		sp3._strip()
+		await get_tree().process_frame
+		_ok(sp3.armour.shed_count >= sp3.armour._order.size(), "at zero it is all gone")
+		_ok(sp3.stripped and sp3.rig != null and not sp3.rig.visible,
+			"the armour is off him")
+		_ok(sp3.pilot_body != null, "and there is a man standing there")
+
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	get_tree().quit(1 if bad > 0 else 0)

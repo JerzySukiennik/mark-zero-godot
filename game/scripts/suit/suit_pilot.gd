@@ -27,6 +27,11 @@ const AUTO_BRAKE := 0.55
 const AUTO_BRAKE_DEADZONE := 0.12
 ## Below this it stops braking, so it settles instead of hunting around zero.
 const AUTO_BRAKE_FLOOR := 1.5
+## AIM ASSIST. The cone the reticle counts as "on" a man, and how far the look stick is
+## slowed while he is inside it — friction, the oldest trick in the book and the one that
+## costs the player nothing, because it only ever makes the camera easier to hold still.
+const ASSIST_CONE := deg_to_rad(7.0)
+const ASSIST_FRICTION := 0.45
 
 @export var peer_id := 1
 @export var armor_id := "mk1"
@@ -50,11 +55,15 @@ var _stage: Stage
 ## visibly snaps back, which reads far worse than being 120 ms behind.
 var _net_pos := Vector3.ZERO
 var _net_basis := Basis.IDENTITY
+var marks: ThreatMarks
+
 ## Per-hand shot envelope, 1 at the instant of firing and gone in a fifth of a second.
 ## This is the ONLY thing that tells the two arms apart while shooting: the authored "fire"
 ## pose is deliberately symmetric, so that pressing R1 cannot animate the left arm.
 var _recoil := { "R": 0.0, "L": 0.0 }
 var _buffer := { "R": 0.0, "L": 0.0 }
+## Who the reticle is currently over. Shared by the friction, the magnetism and the HUD.
+var locked_on: Node3D = null
 ## How far the firing arm reaches past the shared stance, in radians.
 const SHOT_REACH := 0.42
 ## The snap back through the shoulder. Cubed, so it is violent for two frames and then gone.
@@ -63,6 +72,12 @@ const SHOT_DECAY := 5.0
 ## How long a press is remembered while the repulsor is still cooling.
 const FIRE_BUFFER := 0.22
 var _net_thrust := 0.0
+var armour: ArmourDamage
+## Tony, once there is nothing left. Held rather than spawned on demand so the swap is
+## instant — a frame with no body at all reads as the player being deleted.
+var pilot_body: Node3D
+var stripped := false
+var on_foot_only := false
 
 var is_mine: bool:
 	get: return peer_id == Net.my_id
@@ -75,6 +90,10 @@ func setup(id: int, armor: String, stage: Stage) -> void:
 func _ready() -> void:
 	add_to_group("player")
 	add_to_group("hittable")
+	marks = ThreatMarks.new()
+	marks.name = "ThreatMarks"
+	# In the WORLD, so the bracket does not inherit a body that banks and tumbles.
+	get_parent().call_deferred("add_child", marks)
 	# Something for incoming fire to hit; see scripts/combat/hurtbox.gd.
 	add_child(Hurtbox.new(self, 0.62, 2.10))
 	model = FlightModel.new()
@@ -101,6 +120,12 @@ func _ready() -> void:
 	add_child(turret)
 	laser = WristLaser.new()
 	add_child(laser)
+
+	# Debris lives in the WORLD, like the bolts and the contrail: a shoulder pad that
+	# follows the suit around after falling off it is not a shoulder pad that fell off.
+	armour = ArmourDamage.new()
+	armour.name = "ArmourDamage"
+	get_parent().call_deferred("add_child", armour)
 
 	# Now the rig, with somewhere for all of it to attach.
 	_load_rig(armor_id)
@@ -156,6 +181,9 @@ func _load_rig(id: String) -> void:
 		turret.attach(skel)
 	if laser != null:
 		laser.attach(skel)
+	if armour != null:
+		armour.bind(rig, skel)
+		armour.ground_y = _stage.ground_y if _stage != null else 0.0
 	if visor != null and visor.hud != null:
 		visor.hud.set_armor_name(SuitSpecs.get_spec(id).name)
 
@@ -174,6 +202,11 @@ func _physics_process(delta: float) -> void:
 
 func _step_local(delta: float) -> void:
 	var look := Pad.look(delta)
+	# FRICTION. Slowing the stick while the crosshair is over someone is what lets a thumb
+	# hold an aim it could never hold steady on its own.
+	locked_on = _assist_target()
+	if locked_on != null:
+		look *= ASSIST_FRICTION
 	_hurt_cool = maxf(0.0, _hurt_cool - delta)
 	_hurt_flash = maxf(0.0, _hurt_flash - delta)
 	var move := Pad.move()
@@ -216,7 +249,11 @@ func _step_local(delta: float) -> void:
 	# stick has to move the suit across the ground rather than light the thrusters — so the
 	# flight controls stand down entirely until something asks it into the air. X, R2 and
 	# any real deflection of the stick while already flying all count as asking.
-	var on_foot := model.grounded and not Pad.pressed("up")
+	# WITH NO SUIT THERE IS NO FLYING. He walks, and that is all — which is the whole
+	# point of the armour coming apart rather than a number reaching zero.
+	if stripped:
+		on_foot_only = true
+	var on_foot := (model.grounded and not Pad.pressed("up")) or stripped
 	# The instant X is pressed with both feet down, kick clear of the plate. Without it the
 	# climb rate alone has to fight a full g from a standing start, which reads as a hop.
 	if model.grounded and Pad.just_pressed("up"):
@@ -296,6 +333,7 @@ func _step_local(delta: float) -> void:
 		trail.update(delta, model.position - Vector3(0, FEET_DROP * 0.8, 0),
 			model.speed, model.speed / 343.0, model.basis_)
 
+	_update_threat_marks(delta)
 	Rumble.set_flight(model.thrust_mag, model.g_force)
 	if was_flying and model.grounded:
 		var f := clampf(-falling / 40.0, 0.0, 1.0)
@@ -309,6 +347,7 @@ func _step_local(delta: float) -> void:
 	if visor != null and visor.hud != null:
 		# Real time, not scaled: the HUD must not sway in slow motion while aiming, or it
 		# reads as the helmet lagging rather than the world slowing.
+		visor.hud.target_locked = locked_on != null
 		visor.hud.feed(delta / maxf(0.05, Engine.time_scale), look, model.speed, health, aiming)
 		if guns != null:
 			visor.hud.repulsor_l = guns.charge["L"]
@@ -380,6 +419,9 @@ func _shoot(aiming: bool, delta: float) -> void:
 			continue
 		if not guns.ready_to_fire(hand):
 			continue
+		# NO ARM, NO REPULSOR. The cost of losing a piece is the point of losing it.
+		if armour != null and not armour.can_use(hand):
+			continue
 		_buffer[hand] = 0.0
 		# SuitRig.SIDE, not `hand`: the models name their sides from the opposite
 		# convention to the one the game flies in, so piv_palmL is the hand on the RIGHT of
@@ -389,7 +431,7 @@ func _shoot(aiming: bool, delta: float) -> void:
 			continue
 		var muzzle: Vector3 = (skel.pivots[pivot_name] as Node3D).global_position
 		var target := Repulsors.aim_point(camera, muzzle)
-		var kick := guns.fire(hand, muzzle, target)
+		var kick := guns.fire(hand, muzzle, target, locked_on)
 		_recoil[hand] = 1.0
 		if kick != Vector3.ZERO:
 			# RECOIL MOVES THE SUIT. Firing downward should lift you — a repulsor is a
@@ -527,9 +569,111 @@ func take_hit(amount: float, from: Vector3, kind := "") -> void:
 	health = clampf(health - amount / MAX_HP, 0.0, 1.0)
 	_hurt_flash = 0.35
 	Rumble.hit(0.7, 0.45, 0.14)
+	# THE SUIT COMES APART AS IT GOES. Pieces are shed against the new figure, so a rocket
+	# that takes a quarter of the bar strips a quarter of the armour in one go.
+	if armour != null:
+		armour.sync(health)
+	if health <= 0.0 and not stripped:
+		_strip()
 	# Shoved by what hit you. Small — being knocked about by rifle fire would take the
 	# flight model out of the player's hands, which is the one thing it must never do.
 	var push := global_position - from
 	push.y *= 0.3
 	if push.length_squared() > 1e-4 and model != null:
 		model.velocity += push.normalized() * amount * 0.06
+
+## NOTHING LEFT. The armour is gone, and what is standing there is a man who cannot fly.
+##
+## The rig is hidden rather than freed: the pose system, the exhaust, the turret and the
+## laser are all bound to its pivots, and tearing those out mid-frame is a crash looking
+## for a place to happen. They are silenced instead, which is also the honest model — the
+## hardware is still strapped to him, it just has no power.
+func _strip() -> void:
+	stripped = true
+	if rig != null:
+		rig.visible = false
+	if fx != null:
+		fx.drive(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+	# Tony himself. The adult body, tinted as an undersuit rather than a jacket.
+	pilot_body = SuitLoader.load_suit("res://assets/suits/thug.glb")
+	if pilot_body != null:
+		add_child(pilot_body)
+		pilot_body.position = Vector3(0, -FEET_DROP, 0)
+		_wear_undersuit(pilot_body)
+	if visor != null and visor.hud != null:
+		visor.hud.set_armor_name("TONY STARK")
+
+func _wear_undersuit(n: Node) -> void:
+	if n is MeshInstance3D:
+		var mesh: Mesh = (n as MeshInstance3D).mesh
+		if mesh != null:
+			for i in mesh.get_surface_count():
+				var src = mesh.surface_get_material(i)
+				if not (src is StandardMaterial3D):
+					continue
+				# Skin stays skin — the same material the thug names, and the same reason.
+				if String((src as StandardMaterial3D).resource_name) == "mat_trim":
+					continue
+				var m: StandardMaterial3D = (src as StandardMaterial3D).duplicate()
+				m.albedo_color = Color(0.11, 0.12, 0.14)
+				m.albedo_texture = null
+				m.emission_enabled = false
+				m.metallic = 0.05
+				m.roughness = 0.80
+				(n as MeshInstance3D).set_surface_override_material(i, m)
+	for c in n.get_children():
+		_wear_undersuit(c)
+
+## THE TWO WARNINGS. Polled rather than wired through signals: enemies come and go by the
+## dozen and a connection per thug per frame is a lot of bookkeeping for something one
+## loop over a group answers exactly.
+func _update_threat_marks(delta: float) -> void:
+	if marks == null:
+		return
+	marks.global_position = global_position
+
+	# Spider-sense: is anything winding up on ME, and how soon. The closest tell wins, so
+	# a second man aiming does not reset the urgency of the first.
+	var soonest := -1.0
+	for n in get_tree().get_nodes_in_group("enemy"):
+		if not (n is Enemy) or not is_instance_valid(n):
+			continue
+		var e: Enemy = n
+		var tell: float = e.telegraphing()
+		if tell <= 0.0 or e._target != self:
+			continue
+		soonest = maxf(soonest, 1.0 - clampf(tell / Enemy.AIM_TELL, 0.0, 1.0))
+	marks.sense_on = move_toward(marks.sense_on, maxf(0.0, soonest), delta * 6.0)
+
+	# And the bracket, for a rocket that is actually chasing this body.
+	var near := -1.0
+	for n in get_tree().get_nodes_in_group("gunfire"):
+		if n is Gunfire:
+			near = maxf(near, (n as Gunfire).lock_on(self))
+	marks.locked = near >= 0.0
+	marks.lock_near = maxf(0.0, near)
+
+## The man under the crosshair, if there is one. Angle, not distance: the player is
+## pointing at somebody, and the nearest body to the SUIT is very often not him.
+func _assist_target() -> Node3D:
+	if camera == null:
+		return null
+	var eye := camera.global_position
+	var aim := -camera.global_transform.basis.z
+	var best: Node3D = null
+	var best_ang := ASSIST_CONE
+	for n in get_tree().get_nodes_in_group("enemy"):
+		if not (n is Enemy) or not is_instance_valid(n):
+			continue
+		var e: Enemy = n
+		if e.state == Enemy.DOWN:
+			continue
+		var to := (e.global_position + Vector3(0, 0.9, 0)) - eye
+		var d := to.length()
+		if d < 2.0 or d > 400.0:
+			continue
+		var ang := aim.angle_to(to / d)
+		if ang < best_ang:
+			best_ang = ang
+			best = e
+	return best

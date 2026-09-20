@@ -41,10 +41,29 @@ const RECHARGE := 1.0 / (SHOTS * RELOAD_PER_SHOT)
 ## What one bolt takes off. Sized against EnemyKinds: three drop a thug, five a rifleman,
 ## and a brute needs most of a magazine — so the big one is a decision, not a speed bump.
 const DAMAGE := 12.0
+## AIM ASSIST, of the kind console shooters have used since the first Halo. Three things
+## are standard and all three are here, split across this file and SuitPilot:
+##   FRICTION    the look stick slows while the reticle is over a man        (SuitPilot)
+##   MAGNETISM   the shot curves a little towards him                        (here)
+##   a LOCK MARK so the player can see which one the game thinks he means    (Hud)
+##
+## Magnetism is the one that does the work at this range. A suit hovering two hundred
+## metres up is aiming at a target a few pixels across, and Jurek's report was blunt:
+## "dosłownie nie da się trafić teraz tym Iron Manem." Bending the bolt is far kinder than
+## snapping the camera, which fights the player for control of where he is looking.
+## Swept against a target 40 m away aimed 1.5 m wide: at 3.4 the bolt closed to 1.38 m and
+## missed, at 8 to 1.12 m and still missed, at 18 it lands, and past that nothing improves
+## because the residual is the lateral offset at the instant it goes by. Twenty, with the
+## margin on the right side of the cliff.
+const MAGNET_TURN := 20.0
+## Bolts only bend for something they were already roughly aimed at.
+const MAGNET_CONE := 0.978
 
 signal fired(hand: String)
 
 class Bolt:
+	## What this bolt is bending towards, if anything.
+	var chase: Node3D = null
 	var node: Node3D
 	var light: OmniLight3D
 	var tail: Node3D
@@ -147,7 +166,7 @@ func ready_to_fire(hand: String) -> bool:
 		and charge.get(hand, 0.0) >= DRAIN - 0.0001
 
 ## Fire one hand. Returns the recoil to apply to the airframe, or ZERO if it did not fire.
-func fire(hand: String, muzzle: Vector3, target: Vector3) -> Vector3:
+func fire(hand: String, muzzle: Vector3, target: Vector3, chase: Node3D = null) -> Vector3:
 	if not ready_to_fire(hand):
 		return Vector3.ZERO
 	var b: Bolt = _take()
@@ -164,6 +183,7 @@ func fire(hand: String, muzzle: Vector3, target: Vector3) -> Vector3:
 	dir = dir.normalized()
 
 	b.live = true
+	b.chase = chase
 	b.life = LIFE
 	b.vel = dir * SPEED
 	b.node.visible = true
@@ -195,6 +215,19 @@ func _physics_process(delta: float) -> void:
 		if not b.live:
 			continue
 		b.life -= delta
+
+		# The bend. Small, capped by a cone, and only towards a body the shot was already
+		# pointed at — a bolt that turns ninety degrees is a homing missile and stops being
+		# something the player aimed.
+		if b.chase != null and is_instance_valid(b.chase):
+			var want := (b.chase.global_position + Vector3(0, 0.9, 0)) - b.node.global_position
+			if want.length_squared() > 1e-4:
+				var dir := b.vel.normalized()
+				var to := want.normalized()
+				if dir.dot(to) > MAGNET_CONE:
+					b.vel = dir.slerp(to, clampf(MAGNET_TURN * delta, 0.0, 1.0)) * b.vel.length()
+					b.node.look_at(b.node.global_position + b.vel, Vector3.UP)
+
 		var step := b.vel * delta
 
 		# SWEPT AGAINST THE WORLD. Until there was anything solid to find, these simply
