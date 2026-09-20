@@ -225,8 +225,7 @@ func _ready() -> void:
 		var m3: SuitMenu = back.visor.menu
 		m3.open()
 		m3.tab = 1                    # ARMOUR BAY
-		m3.row = 0                    # MARK I, the one that is free
-		m3.owned["mk3"] = true
+		# Every armour is owned now, so this is a straight selection rather than a purchase.
 		m3.row = 2                    # MARK III
 		m3._accept()
 		await get_tree().process_frame

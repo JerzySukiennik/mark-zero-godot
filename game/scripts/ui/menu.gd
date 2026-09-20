@@ -20,7 +20,6 @@ signal opened
 signal closed
 signal armor_chosen(id: String)
 signal hero_chosen(id: String)
-signal purchase_attempted(id: String, price: int)
 
 const CYAN := Color(0.55, 0.88, 1.0)
 const AMBER := Color(1.0, 0.72, 0.28)
@@ -37,18 +36,26 @@ const ROSTER := [
 ]
 
 ## Price in credits. The Mark I is free because it is the one he built in a cave.
+## ALL OF THEM, FREE. Jurek: "zrób żeby najlepsze stroje były za darmo."
+##
+## The prices are gone rather than set to zero, because a column of "0 CR" is a shop that
+## has been switched off rather than a hangar. What is left is a rack of five armours you
+## own, which is what it always should have been while the flight model is still being
+## tuned — locking the Mark L behind fourteen thousand credits nobody can earn meant the
+## most interesting suit in the game was the one never being played.
 const CATALOGUE := [
-	{ id = "mk1",  name = "MARK I",     sub = "CAVE BUILD",      price = 0 },
-	{ id = "mk2",  name = "MARK II",    sub = "PROTOTYPE",       price = 1200 },
-	{ id = "mk3",  name = "MARK III",   sub = "RED AND GOLD",    price = 3000 },
-	{ id = "mk42", name = "MARK XLII",  sub = "PREHENSILE",      price = 6500 },
-	{ id = "mk50", name = "MARK L",     sub = "NANOTECH",        price = 14000 },
+	{ id = "mk1",  name = "MARK I",     sub = "CAVE BUILD" },
+	{ id = "mk2",  name = "MARK II",    sub = "PROTOTYPE" },
+	{ id = "mk3",  name = "MARK III",   sub = "RED AND GOLD" },
+	{ id = "mk42", name = "MARK XLII",  sub = "PREHENSILE" },
+	{ id = "mk50", name = "MARK L",     sub = "NANOTECH" },
 ]
 
 var tab := 0
 var row := 0
-var owned := { "mk1": true }
-var credits := 0
+## Kept, and always true for everything. The lookups stay so that a future lock — a suit
+## that has to be BUILT rather than bought, say — has somewhere to live.
+var owned := { "mk1": true, "mk2": true, "mk3": true, "mk42": true, "mk50": true }
 var equipped := "mk1"
 ## Who the player is, and who else in the room is already somebody. FED IN, never read off
 ## the Net autoload: autoloads do not exist under `godot --script`, so a panel that reaches
@@ -147,17 +154,9 @@ func _accept() -> void:
 	if tab != 1:
 		return
 	var item: Dictionary = CATALOGUE[row]
-	if owned.get(item.id, false):
-		equipped = item.id
-		armor_chosen.emit(item.id)
-		_say("%s ONLINE" % item.name)
-	elif credits >= item.price:
-		credits -= item.price
-		owned[item.id] = true
-		purchase_attempted.emit(item.id, item.price)
-		_say("%s ACQUIRED" % item.name)
-	else:
-		_say("NEED %d MORE CREDITS" % (item.price - credits))
+	equipped = item.id
+	armor_chosen.emit(item.id)
+	_say("%s ONLINE" % item.name)
 
 func _say(t: String) -> void:
 	# Deliberately NOT Kenney's confirmation_001: Jurek has said he dislikes it and that
@@ -215,7 +214,7 @@ func _draw() -> void:
 
 	# ---- footer ---------------------------------------------------------------------
 	var fy := s.y - m.y * 0.45
-	_text(Vector2(m.x, fy), "CREDITS  %d" % credits, AMBER, int(15 * u))
+	_text(Vector2(m.x, fy), "ARMOURY  %d SUITS" % CATALOGUE.size(), AMBER, int(15 * u))
 	var hint := "%s SELECT     %s BACK" % [PadInput.glyph("ui_accept_pad"), PadInput.glyph("ui_back")]
 	_text(Vector2(m.x + w - hint.length() * 8.6 * u, fy), hint, DIM, int(13 * u))
 	if _msg_t > 0.0:
@@ -278,11 +277,8 @@ func _draw_bay(at: Vector2, w: float, h: float, u: float) -> void:
 		var right := at.x + list_w - 22 * u
 		if is_on:
 			_right(Vector2(right, y + 40 * u), "EQUIPPED", AMBER, int(15 * u))
-		elif have:
-			_right(Vector2(right, y + 40 * u), "OWNED", DIM, int(15 * u))
 		else:
-			var col: Color = AMBER if credits >= item.price else LOCKED
-			_right(Vector2(right, y + 40 * u), "%d CR" % item.price, col, int(16 * u))
+			_right(Vector2(right, y + 40 * u), "READY", DIM, int(15 * u))
 
 	# The detail panel. Shows what the selection actually buys you, in the numbers the
 	# flight model really uses — a shop that quotes made-up stats is a shop that lies. Sized

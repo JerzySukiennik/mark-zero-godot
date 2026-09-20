@@ -38,8 +38,8 @@ func _initialize() -> void:
 	_menu = SuitMenu.new()
 	_menu.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vp.add_child(_menu)
-	_menu.credits = 4200
-	_menu.owned = { "mk1": true, "mk2": true }
+	# No override any more: every armour is owned, so a preview that pretends otherwise is
+	# showing a screen the player will never see.
 	_menu.equipped = "mk2"
 	_menu.visible = false
 
@@ -54,7 +54,7 @@ func _initialize() -> void:
 		{ file = "menu_bay.png", setup = func():
 			_hud.visible = false
 			_menu.visible = true; _menu.tab = 1; _menu.row = 2; _menu.queue_redraw() },
-		{ file = "menu_bay_locked.png", setup = func():
+		{ file = "menu_bay_top.png", setup = func():
 			_hud.visible = false
 			_menu.visible = true; _menu.tab = 1; _menu.row = 4; _menu.queue_redraw() },
 		{ file = "menu_controls.png", setup = func():
