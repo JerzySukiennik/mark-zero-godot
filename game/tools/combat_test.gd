@@ -75,9 +75,14 @@ func _ready() -> void:
 	add_child(hero)
 	hero.global_position = Vector3(0, 1, 0)
 	var thug := _spawn("brawler", Vector3(0, 1, -14.0), guns)
-	await _tick(300)
-	_ok(thug.global_position.distance_to(hero.global_position) < 6.0,
-		"a brawler closes the distance (%.1f m)" % thug.global_position.distance_to(hero.global_position))
+	# CLOSEST APPROACH, not final position. They hold, circle and back off on purpose now —
+	# "oni nie powinni być tak chętnie gonić tego" — so where a man happens to be standing
+	# when the clock runs out says nothing. Whether he ever got to you does.
+	var closest := 1e9
+	for i in 600:
+		await get_tree().physics_frame
+		closest = minf(closest, thug.global_position.distance_to(hero.global_position))
+	_ok(closest < 4.0, "a brawler does close on you (got within %.1f m)" % closest)
 	_ok(hero.hits > 0, "and hits you when he gets there (%d times, %.0f damage)" % [hero.hits, hero.hurt])
 	thug.queue_free()
 	await _tick(2)
@@ -86,7 +91,10 @@ func _ready() -> void:
 	hero.hits = 0
 	hero.hurt = 0.0
 	var shooter := _spawn("rifle", Vector3(0, 1, -34.0), guns)
-	await _tick(420)
+	# Long enough for two volleys. They used to fire continuously at their own rate; now a
+	# burst is followed by five seconds of nothing, so a three-second window could sample
+	# the gap and read as a rifleman who never fires.
+	await _tick(900)
 	_ok(hero.hits > 0, "a rifleman hits you from range (%d rounds, %.0f damage)" % [hero.hits, hero.hurt])
 	shooter.queue_free()
 	await _tick(2)

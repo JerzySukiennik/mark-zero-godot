@@ -327,10 +327,13 @@ func _drive_laser_arm() -> void:
 	if laser == null or not laser.active or skel == null:
 		return
 	var side: String = SuitRig.SIDE["R"]
-	# Pointed, not nudged: the beam leaves along the forearm, so the forearm has to be
-	# aimed rather than leaned. Level and straight ahead.
-	skel.aim_joint("piv_shoulder" + side, Vector3(0.10, -0.12, -0.99).normalized())
-	skel.aim_joint("piv_elbow" + side, Vector3(0.0, -0.06, -0.998).normalized())
+	# WORLD-aimed, down the suit's own nose. Asking in the parent frame — which is what the
+	# authored poses speak — put the forearm 45 degrees above the horizon and the beam with
+	# it, because the elbow's "forward" is forward OF A SHOULDER that had itself just been
+	# turned. Jurek, twice: "ten laser teraz strzela jakoś do góry".
+	var nose := -model.basis_.z
+	skel.aim_joint_world("piv_shoulder" + side, (nose + Vector3(0, -0.06, 0)).normalized())
+	skel.aim_joint_world("piv_elbow" + side, nose)
 	# The other arm tucks in, out of the beam's way and out of the silhouette.
 	var off: String = SuitRig.SIDE["L"]
 	skel.add_offset("piv_shoulder" + off, Poses.Z_AX, 0.40)

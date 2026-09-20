@@ -22,8 +22,12 @@ const WEB_TIME := 4.5
 const CORPSE_TIME := 12.0
 
 signal died(enemy: Enemy)
+## Fired the moment he commits to a volley, so the player can be warned before it lands.
+signal warned(enemy: Enemy, delay: float)
 
 enum { SEEK, ATTACK, STAGGER, WEBBED, DOWN }
+## What he has talked himself into this moment.
+enum { PRESS, HOLD, FLEE }
 
 var kind := "brawler"
 var spec: Dictionary = {}
@@ -45,6 +49,9 @@ var _burst := 0
 var _burst_gap := 0.0
 var _stride := 0.0
 var _hurt_flash := 0.0
+var _mood := PRESS
+var _mind := 0.0
+var _drift := 1.0
 
 func setup(k: String, gunfire: Gunfire) -> void:
 	kind = k
@@ -98,18 +105,12 @@ func _tint(n: Node) -> void:
 					var pick: Color = spec["trim"] if i % 3 == 1 else spec["body"]
 					m.albedo_color = pick
 					m.albedo_texture = null
-					# LIT FROM WITHIN, a little. The map is deliberately near-black with
-					# white lines, and these were authored dark on top of that — so they
-					# spawned, walked in and were measured, and Jurek still reported "nie
-					# ma". Five of them were on the plate at the time. A dark figure on a
-					# dark floor at forty metres is not there as far as the player is
-					# concerned, and being correct in a group count is no defence.
-					#
-					# Same lever as the armour: emission touches the character and nothing
-					# else, where turning the lights up would take the map with it.
-					m.emission_enabled = true
-					m.emission = pick
-					m.emission_energy_multiplier = 0.34
+					# NO GLOW. They were lit from within to solve being invisible on a
+					# near-black plate, and that worked — but glowing men are not what
+					# Jurek wants on screen: "nie podświetlaj ich bez potrzeby". The
+					# readability now comes from the colours themselves being mid-value
+					# rather than from the material emitting, which is the honest fix.
+					m.emission_enabled = false
 					m.metallic = 0.10
 					m.roughness = 0.72
 					(n as MeshInstance3D).set_surface_override_material(i, m)
@@ -256,13 +257,53 @@ func _fight(delta: float) -> void:
 	var dist := flat.length()
 	var reach: float = spec["reach"]
 
-	# CLOSE THE GAP, then hold it. A crowd that walks into you and keeps pushing is a
-	# crowd that shoves the player around the map; they stop where they can reach.
+	# HE HAS TO NOTICE YOU FIRST. Everything on the plate used to run at the player from
+	# anywhere — "jak jestem mega daleko, to oni już biegną do mnie" — which made a street
+	# read as a swarm rather than as people who happen to be standing there.
+	if dist > float(spec["notice"]):
+		_idle_about(delta)
+		state = SEEK
+		return
+
+	# AND HE KNOWS HE WILL LOSE. Jurek: "oni nie powinni być tak chętnie gonić tego, bo
+	# wiedzą, że umrą". Nerve decides whether he closes, holds where he is, or backs off,
+	# and it is re-rolled on a slow timer rather than every frame so he commits to a choice
+	# for a second or two instead of vibrating between them.
+	_mind -= delta
+	if _mind <= 0.0:
+		_mind = randf_range(1.1, 2.6)
+		var scared := 1.0 - float(spec["nerve"])
+		var hurt := 1.0 - clampf(hp / maxf(1.0, float(spec["hp"])), 0.0, 1.0)
+		# RUNNING IS EARNED, not rolled. A cold dice-throw sent men sprinting away from a
+		# fight they had not yet lost, which reads as broken rather than as frightened.
+		# What makes a man break is being HURT, or watching something he cannot reach hang
+		# in the air above him — so those are the two things that open the door.
+		var airborne := _target != null and _target.global_position.y - global_position.y > 8.0
+		var panic := hurt * 0.75 + scared * (0.25 if airborne else 0.0)
+		var roll := randf()
+		if roll < panic:
+			_mood = FLEE
+		elif roll < panic + scared * 0.7:
+			_mood = HOLD
+		else:
+			_mood = PRESS
+
 	var want := Vector3.ZERO
-	if dist > reach * 0.9:
-		want = flat.normalized() * float(spec["speed"])
-	elif dist < reach * 0.55:
-		want = -flat.normalized() * float(spec["speed"]) * 0.6
+	match _mood:
+		FLEE:
+			want = -flat.normalized() * float(spec["speed"]) * 0.9
+		HOLD:
+			# Shuffling sideways rather than standing at attention: a man keeping his
+			# distance still moves, and a line of statues reads as a bug.
+			var side := flat.normalized().cross(Vector3.UP)
+			want = side * float(spec["speed"]) * 0.35 * _drift
+			if dist > reach * 2.2:
+				want += flat.normalized() * float(spec["speed"]) * 0.4
+		_:
+			if dist > reach * 0.9:
+				want = flat.normalized() * float(spec["speed"])
+			elif dist < reach * 0.55:
+				want = -flat.normalized() * float(spec["speed"]) * 0.6
 	# ELBOW ROOM. Everyone is walking to the same point, so without this a wave arrives as
 	# one column standing inside itself — visible in the very first render of a crowd. It
 	# is not pathfinding, just enough shove to keep a mob looking like a mob.
@@ -284,11 +325,16 @@ func _fight(delta: float) -> void:
 		return
 
 	if in_range and _cool <= 0.0:
-		_cool = float(spec["rate"])
 		if spec["ranged"]:
+			# VOLLEYS. They fired at their own rate forever, which is a hose rather than a
+			# fight — Jurek: "oni nie powinni strzelać non stop, tylko w takich falach co
+			# pięć sekund". A burst, then a long enough gap to move in it.
+			_cool = float(spec["volley"]) * randf_range(0.82, 1.18)
 			_burst = int(spec["burst"])
 			_burst_gap = 0.0
+			warned.emit(self, _burst_gap)
 		else:
+			_cool = float(spec["rate"])
 			_swing()
 
 ## Fists and knives. No projectile — if he is in reach when the swing lands, it lands.
@@ -352,3 +398,17 @@ func _separation() -> Vector3:
 			continue
 		push += d / len * (1.0 - len / PERSONAL)
 	return push.limit_length(1.0)
+
+## Milling about, out of range and with nothing to do. Not standing perfectly still: a
+## street of motionless men reads as a scene that has not loaded.
+func _idle_about(delta: float) -> void:
+	_mind -= delta
+	if _mind <= 0.0:
+		_mind = randf_range(1.8, 4.0)
+		_drift = -_drift
+		_idle_dir = Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0)).normalized()
+	var amble: float = float(spec["speed"]) * 0.22
+	velocity.x = move_toward(velocity.x, _idle_dir.x * amble, 8.0 * delta)
+	velocity.z = move_toward(velocity.z, _idle_dir.z * amble, 8.0 * delta)
+
+var _idle_dir := Vector3.FORWARD

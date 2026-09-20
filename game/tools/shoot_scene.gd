@@ -33,11 +33,15 @@ func _process(_d: float) -> void:
 			return
 		# In the air, with the sticks reading zero — which IS the hover case, the one where
 		# the boots were dark.
-		_pilot.model.position = Vector3(0, 14, 0)
+		_pilot.model.position = Vector3(0, 60, 0)
 		_pilot.model.grounded = false
+		# "fast" on the command line flies it, so the prone fold can be looked at rather
+		# than trusted. Hovering is the default because that is where the boots are judged.
+		if "fast" in OS.get_cmdline_user_args():
+			_pilot.model.velocity = Vector3(0, 0, -260)
 		return
 
-	if _i < 900:
+	if _i < (200 if "fast" in OS.get_cmdline_user_args() else 900):
 		# An isolation pass: "only", "noflame", "nofog", "nosparks" or nothing.
 		var only := ""
 		for a in OS.get_cmdline_user_args():
@@ -55,9 +59,14 @@ func _process(_d: float) -> void:
 		# Our own camera, low and close: the boots are what is being judged here.
 		_cam = Camera3D.new()
 		add_child(_cam)
-		_cam.global_position = _pilot.model.position + Vector3(10.0, 6.0, 22.0)
-		_cam.look_at(_pilot.model.position + Vector3(0, -6.0, -14.0), Vector3.UP)
-		_cam.fov = 58.0
+		if "fast" in OS.get_cmdline_user_args():
+			_cam.global_position = _pilot.model.position + Vector3(9.0, 2.5, 11.0)
+			_cam.look_at(_pilot.model.position, Vector3.UP)
+			_cam.fov = 50.0
+		else:
+			_cam.global_position = _pilot.model.position + Vector3(10.0, 6.0, 22.0)
+			_cam.look_at(_pilot.model.position + Vector3(0, -6.0, -14.0), Vector3.UP)
+			_cam.fov = 58.0
 		_cam.current = true
 		return
 	var img := get_viewport().get_texture().get_image()

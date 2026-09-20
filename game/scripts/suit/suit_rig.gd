@@ -265,6 +265,25 @@ func aim_joint(name: String, dir: Vector3, twist: float = 0.0) -> void:
 		return
 	_target[name] = _aim_joint(name, dir, twist)
 
+## Points one joint along a WORLD direction.
+##
+## `aim_joint` takes its direction in the pivot's PARENT frame, which is the same grammar
+## the authored poses use and is right for them — a pose describes a shape, and a shape is
+## relative. It is exactly wrong for aiming at something: asking for "straight ahead" in a
+## parent frame that has itself just been rotated gives you straight ahead OF THAT, and
+## down a chain the error compounds. Measured on the wrist laser: a shoulder and an elbow
+## both asked to point forward produced a forearm 45 degrees ABOVE the horizon, and the
+## beam went with it.
+func aim_joint_world(name: String, world_dir: Vector3, twist := 0.0) -> void:
+	if not pivots.has(name) or world_dir.length_squared() < 1e-6:
+		return
+	var node: Node3D = pivots[name]
+	var local := world_dir
+	var parent := node.get_parent()
+	if parent is Node3D and (parent as Node3D).is_inside_tree():
+		local = (parent as Node3D).global_basis.inverse() * world_dir
+	_target[name] = _aim_joint(name, local.normalized(), twist)
+
 ## Blend several poses at once. `weights` is name -> 0..1; they need not sum to one.
 func set_pose_weights(weights: Dictionary) -> void:
 	var first := true

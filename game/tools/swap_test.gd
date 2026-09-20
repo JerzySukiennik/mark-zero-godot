@@ -233,6 +233,32 @@ func _ready() -> void:
 		_ok(back.armor_id == "mk3", "picking an armour changes it (%s)" % back.armor_id)
 		_ok(Net.local_armor == "mk3", "and the roster agrees (%s)" % Net.local_armor)
 
+	print("=== the laser points where the suit does ===")
+	var armed = arena.suits.get(1)
+	if armed is SuitPilot:
+		var ip: SuitPilot = armed
+		# CLOSE THE MENU FIRST. The armour-bay section above left it open, and an open
+		# menu makes the pilot's whole loop return early — so the laser was started and
+		# then never updated, and the beam sat at identity reading as 90 degrees of
+		# elevation. A failure that looks exactly like the bug being tested for.
+		if ip.visor != null and ip.visor.menu != null and ip.visor.menu.is_open:
+			ip.visor.menu.close()
+		await get_tree().process_frame
+		ip.model.position = Vector3(0, 180, 0)
+		ip.model.grounded = false
+		ip.laser.charge = 1.0
+		ip.laser.start(true)
+		for i in 24:
+			await get_tree().physics_frame
+		var nose := -ip.model.basis_.z
+		var beam := ip.laser._beam.global_basis.y.normalized()
+		# It shot UP, twice, because the arm was aimed in the PARENT frame while the
+		# intention was world space — and down a shoulder-then-elbow chain that compounds.
+		_ok(beam.dot(nose) > 0.9,
+			"the beam runs down the suit's nose (dot %.3f)" % beam.dot(nose))
+		_ok(absf(beam.y) < 0.25,
+			"and level, not skyward (%.0f deg of elevation)" % rad_to_deg(asin(clampf(beam.y, -1.0, 1.0))))
+
 	print("=== switching over and over ===")
 	# "Dalej tylko bardzo rzadko dziala stroj Iron Spider." Intermittent is the hardest kind
 	# of report to act on, so this just does it eight times and checks every single one —

@@ -63,6 +63,8 @@ var grounded := false
 ## physics frame and never sees either: the camera follows `basis_` too, because a camera
 ## that rolls with the lean is a camera nobody can play behind.
 var bank := 0.0
+## The forward fold, radians. Drawn, never flown.
+var prone := 0.0
 var view_basis := Basis.IDENTITY
 var thrust_mag := 0.0
 var g_force := 1.0
@@ -115,6 +117,12 @@ const LIFT_ASSIST := 0.98
 ## How far the suit leans into a full sideways slide, in radians. Roughly 35 degrees, which
 ## is a committed bank without being aerobatics.
 const BANK_MAX := 0.62
+## How far forward the body folds at speed, and the fractions of top speed it happens over.
+## Short of a right angle on purpose: face-down flat reads as a corpse being thrown, and
+## leaving a little stand-up in it keeps the silhouette a person.
+const PRONE_MAX := 1.32
+const PRONE_FROM := 0.18
+const PRONE_FULL := 0.62
 
 ## ---- on foot ---------------------------------------------------------------------------
 ## Until now the suit had no ground locomotion at all: _resolve_ground clamped Y and that
@@ -476,7 +484,20 @@ func _rotate(delta: float, cmd: Dictionary) -> void:
 	var slide: float = clampf(cmd.get("lateral", 0.0), -1.0, 1.0)
 	var authority := clampf(speed / 45.0, 0.25, 1.0)
 	bank = lerpf(bank, -slide * BANK_MAX * authority, 1.0 - exp(-delta * spec.stability * 1.6))
-	view_basis = Basis.from_euler(Vector3(pitch, yaw, roll + bank), EULER_ORDER_YXZ)
+
+	# HE LIES DOWN AT SPEED. Standing upright while crossing the sky at three hundred
+	# metres a second is the single most obvious thing wrong with the flight — Jurek: "jak
+	# on leci szybko, to powinien się tak horyzontalnie położyć, a teraz jest bez czarów
+	# po prostu tak, że stoi."
+	#
+	# Like the bank, this is a LOOK and stays out of `basis_`. The flight model's forward
+	# is the thrust axis and the camera follows it; pitching the physics frame ninety
+	# degrees to lie the body down would aim the thrust at the ground and stand the horizon
+	# on its end. The body is drawn along the direction of travel, the suit still flies the
+	# way it always did.
+	var fast := clampf((speed / maxf(1.0, spec.top_speed) - PRONE_FROM) / (PRONE_FULL - PRONE_FROM), 0.0, 1.0)
+	prone = lerpf(prone, fast * PRONE_MAX, 1.0 - exp(-delta * 2.4))
+	view_basis = Basis.from_euler(Vector3(pitch + prone, yaw, roll + bank), EULER_ORDER_YXZ)
 
 func _air_density(alt: float) -> float:
 	return maxf(0.14, exp(-maxf(0.0, alt) / 8500.0))
