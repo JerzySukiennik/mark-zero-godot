@@ -17,3 +17,6 @@ shots/
 # the pristine textures live embedded in models/mk50-source.glb.
 game/models/mk50-source_mat_*.png
 game/models/mk50-source_mat_*.png.import
+
+# Exported builds. Binaries belong on a Release, never in the history.
+build/
