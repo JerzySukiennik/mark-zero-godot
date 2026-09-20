@@ -11,7 +11,9 @@ extends CharacterBody3D
 ## combat work at all: every weapon in the game already raycasts, and until now those rays
 ## passed through empty air because there was nothing solid to find.
 
-const BODY := "res://assets/suits/pilot.glb"
+## A GROWN MAN. They were wearing pilot.glb, which is a thirteen-year-old boy — it was
+## simply the only humanoid the project had. Jurek: "oni powinni być realistycznymi ludźmi".
+const BODY := "res://assets/suits/thug.glb"
 const GRAVITY := 22.0
 ## How long a stagger locks him out after a solid hit.
 const STAGGER_TIME := 0.42
@@ -49,6 +51,7 @@ var _burst := 0
 var _burst_gap := 0.0
 var _stride := 0.0
 var _hurt_flash := 0.0
+var _juggle := 0.0
 var _mood := PRESS
 var _mind := 0.0
 var _drift := 1.0
@@ -101,6 +104,12 @@ func _tint(n: Node) -> void:
 			for i in mesh.get_surface_count():
 				var src = mesh.surface_get_material(i)
 				if src is StandardMaterial3D:
+					# SKIN IS NOT CLOTHING. The tint repaints every surface, which turned
+					# his face, neck and hands the same colour as his coat — a man in a
+					# balaclava. The model names that material `mat_trim` and the name
+					# survives the load, so the one place this can be fixed is here.
+					if String((src as StandardMaterial3D).resource_name) == "mat_trim":
+						continue
 					var m: StandardMaterial3D = (src as StandardMaterial3D).duplicate()
 					var pick: Color = spec["trim"] if i % 3 == 1 else spec["body"]
 					m.albedo_color = pick
@@ -177,6 +186,33 @@ func web_hit(amount := 1.0) -> void:
 		glued = WEB_TIME
 		velocity = Vector3.ZERO
 
+## KNOCKED INTO THE AIR, and held there. Jurek's launcher: Spider-Man punches a man
+## upwards, goes up with him and juggles him until he either dies or is dropped.
+##
+## Being juggled is a state rather than just an upward velocity, because the point is that
+## he cannot do anything while it lasts — a thug who keeps swinging at you mid-combo is
+## not being juggled, he is falling past you.
+func launch(up: float, carry: Vector3 = Vector3.ZERO) -> void:
+	if state == DOWN:
+		return
+	state = STAGGER
+	_stagger = 0.9
+	velocity = Vector3(carry.x, up, carry.z)
+	_juggle = 1.4
+
+## Keeps him hanging. Called once per hit in the air; each connection buys a little more
+## time before gravity gets him back.
+func juggle(up: float) -> void:
+	if state == DOWN:
+		return
+	_juggle = maxf(_juggle, 0.55)
+	velocity.y = maxf(velocity.y, up)
+	_stagger = maxf(_stagger, 0.4)
+	state = STAGGER
+
+func is_juggled() -> bool:
+	return _juggle > 0.0
+
 func _die(from: Vector3) -> void:
 	state = DOWN
 	_dead_for = 0.0
@@ -224,8 +260,12 @@ func _physics_process(delta: float) -> void:
 	_pose(delta)
 
 func _fall(delta: float) -> void:
+	if _juggle > 0.0:
+		_juggle -= delta
 	if not is_on_floor():
-		velocity.y -= GRAVITY * delta
+		# A tenth of gravity while he is being juggled. Real gravity ends a combo in about
+		# a third of a second, which is not long enough to press a second button.
+		velocity.y -= GRAVITY * (0.12 if _juggle > 0.0 else 1.0) * delta
 	elif velocity.y < 0.0:
 		velocity.y = 0.0
 	move_and_slide()

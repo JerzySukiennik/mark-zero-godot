@@ -51,6 +51,11 @@ func _tick(n: int) -> void:
 		await get_tree().physics_frame
 
 func _ready() -> void:
+	# SEEDED. The thugs decide whether to press, hold or run on a die roll now, which is
+	# the behaviour Jurek asked for and is death to a test with a fixed threshold — the
+	# same run passes and fails depending on the weather. A fixed seed keeps the randomness
+	# being exercised while making the result reproducible.
+	seed(20260920)
 	_make_floor()
 	var guns := Gunfire.new()
 	add_child(guns)
@@ -78,11 +83,14 @@ func _ready() -> void:
 	# CLOSEST APPROACH, not final position. They hold, circle and back off on purpose now —
 	# "oni nie powinni być tak chętnie gonić tego" — so where a man happens to be standing
 	# when the clock runs out says nothing. Whether he ever got to you does.
+	# Fifteen seconds, because he re-decides every second or two and is allowed to spend
+	# some of them holding his ground. What is being tested is that he DOES come, not that
+	# he comes immediately.
 	var closest := 1e9
-	for i in 600:
+	for i in 1800:
 		await get_tree().physics_frame
 		closest = minf(closest, thug.global_position.distance_to(hero.global_position))
-	_ok(closest < 4.0, "a brawler does close on you (got within %.1f m)" % closest)
+	_ok(closest < 3.0, "a brawler does close on you (got within %.1f m)" % closest)
 	_ok(hero.hits > 0, "and hits you when he gets there (%d times, %.0f damage)" % [hero.hits, hero.hurt])
 	thug.queue_free()
 	await _tick(2)
@@ -148,6 +156,83 @@ func _ready() -> void:
 	# And it wears off, faster on him than on anyone else.
 	_ok(EnemyKinds.spec("brute")["web_decay"] > 1.0,
 		"and it rots off a brute faster than off a thug")
+
+	print("=== Spider-Man's hands ===")
+	var fist := SpiderCombat.new()
+	var body := SpiderModel.new()
+	body.position = Vector3(-60, 1, 0)
+	body.grounded = true
+	var mark2 := _spawn("brawler", Vector3(-60, 1, -9.0), guns)
+	await get_tree().physics_frame
+
+	var base := {
+		walk = Vector2.ZERO, facing = Vector3(0, 0, -1),
+		light = false, heavy = false, heavy_down = false, dodge = false,
+	}
+	# TRIANGLE reaches. The whole point of the primitive attack is that it closes the gap
+	# itself — a strike that only works when you are already touching him is a strike
+	# nobody presses.
+	var press := base.duplicate()
+	press["light"] = true
+	fist.update(1.0 / 120.0, body, press, get_tree())
+	_ok(fist.state == SpiderCombat.ZIP, "triangle throws him at a man nine metres off")
+	var hp0: float = mark2.hp
+	for i in 90:
+		fist.update(1.0 / 120.0, body, base, get_tree())
+		body.step(1.0 / 120.0, { walk = Vector2.ZERO, look = Vector2.ZERO, jump = false,
+			aiming = false, release = false, wall_run = false }, Vector3.ZERO)
+		await get_tree().physics_frame
+	_ok(mark2.hp < hp0, "and it lands (%.0f -> %.0f hp)" % [hp0, mark2.hp])
+	_ok(body.position.distance_to(mark2.global_position) < 6.0,
+		"arriving next to him (%.1f m)" % body.position.distance_to(mark2.global_position))
+
+	# HELD SQUARE launches. Tapped it must NOT — the hold is measured so a quick tap is a
+	# punch and never a launcher by accident.
+	# A FRESH man, somewhere clean. The one from the zip above is down to 2 hp, and a
+	# launcher hits before it lifts — so it killed him and then correctly refused to
+	# launch a corpse, which reads in the log exactly like the launcher not working.
+	mark2.queue_free()
+	await get_tree().physics_frame
+	body.position = Vector3(-90, 1, 0)
+	var mark3 := _spawn("brawler", body.position + Vector3(0, 0, -2.0), guns)
+	await get_tree().physics_frame
+	var hold := base.duplicate()
+	hold["heavy"] = true
+	hold["heavy_down"] = true
+	fist.update(1.0 / 120.0, body, hold, get_tree())
+	hold["heavy_down"] = false
+	_ok(fist.state == SpiderCombat.FREE, "a tap of square is not a launcher")
+	for i in 40:
+		fist.update(1.0 / 120.0, body, hold, get_tree())
+		if fist.state == SpiderCombat.LAUNCH:
+			break
+	_ok(fist.state == SpiderCombat.LAUNCH, "holding it is (after %.2f s)" % SpiderCombat.HOLD_TIME)
+	# WHICHEVER man it picked, not the one the test happened to spawn last: the strike
+	# chooses the nearest in front, and after the zip above that is the first one.
+	var flung: Enemy = fist.target
+	_ok(flung != null and flung.velocity.y > 5.0,
+		"and the man goes UP (%.0f m/s)" % (flung.velocity.y if flung != null else 0.0))
+	_ok(flung != null and flung.is_juggled(), "and hangs there rather than dropping straight back")
+
+	# CIRCLE dodges, and it costs the enemy most of a hit.
+	var before := body.position
+	var duck := base.duplicate()
+	duck["dodge"] = true
+	duck["walk"] = Vector2(1.0, 0.0)
+	fist.state = SpiderCombat.FREE
+	fist.update(1.0 / 120.0, body, duck, get_tree())
+	_ok(fist.state == SpiderCombat.DODGE, "circle dodges")
+	_ok(fist.damage_scale() < 0.5, "and soaks most of a hit while it lasts (%.0f%%)"
+		% (fist.damage_scale() * 100.0))
+	# Past the full dodge, which is 0.34 s — a window sampled at 0.25 s catches it still
+	# running and reads as a dodge that never ends.
+	for i in int(SpiderCombat.DODGE_TIME * 120.0) + 20:
+		fist.update(1.0 / 120.0, body, base, get_tree())
+		body.step(1.0 / 120.0, { walk = Vector2.ZERO, look = Vector2.ZERO, jump = false,
+			aiming = false, release = false, wall_run = false }, Vector3.ZERO)
+	_ok(body.position.distance_to(before) > 1.5,
+		"moving him out of the way (%.1f m)" % body.position.distance_to(before))
+	_ok(fist.damage_scale() == 1.0, "and it ends")
 
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	get_tree().quit(1 if bad > 0 else 0)

@@ -105,11 +105,11 @@ p.loft([ring_xz(0, y, zc, rx, rz, NT, 2.5) for (y, rx, rz, zc) in tp],
 # "street" from behind at forty metres, where the face is four pixels wide.
 hood = []
 for k, (y, rx, rz, zc, sqz) in enumerate([
-        (1.424, 0.104, 0.040, 0.090, 1.0),
-        (1.456, 0.124, 0.052, 0.101, 1.0),
-        (1.488, 0.130, 0.056, 0.107, 1.0),
-        (1.518, 0.120, 0.050, 0.104, 1.0),
-        (1.540, 0.090, 0.034, 0.094, 1.0)]):
+        (1.408, 0.112, 0.034, 0.080, 1.0),
+        (1.442, 0.132, 0.046, 0.092, 1.0),
+        (1.476, 0.138, 0.050, 0.099, 1.0),
+        (1.506, 0.128, 0.045, 0.097, 1.0),
+        (1.532, 0.098, 0.031, 0.089, 1.0)]):
     hood.append([(px, py, pz) for (px, py, pz) in
                  ring_xz(0.0, y, zc, rx, rz, 18, 2.6)])
 p.loft(hood, mat=0)
@@ -125,9 +125,9 @@ emit("body_neck", p, ["mat_trim"])
 
 # ---------------------------------------------------------------- hips (trousers)
 hips_prof = [
-    (1.108, 0.152, 0.120, 0.000),
-    (1.056, 0.160, 0.127, 0.000),
-    (1.002, 0.174, 0.137, 0.000),
+    (1.032, 0.138, 0.106, 0.000),                # inside the jacket, never seen
+    (1.010, 0.158, 0.124, 0.000),
+    (0.992, 0.172, 0.135, 0.000),
     (0.962, 0.185, 0.143, 0.004),                # seat, as wide as the thigh tops
     (0.924, 0.186, 0.140, 0.000),
     (0.890, 0.176, 0.126, -0.005),
@@ -139,8 +139,8 @@ p = Part()
 p.loft([ring_xz(0, y, zc, rx, rz, NT, 2.4) for (y, rx, rz, zc) in hp])
 # belt — a band a centimetre proud of the waistband, on the dark slot
 belt = []
-for (y, g) in ((0.996, 0.000), (0.986, 0.006), (0.960, 0.006), (0.950, 0.000)):
-    belt.append(ring_xz(0, y, 0.000, 0.176 + g, 0.138 + g, NT, 2.4))
+for (y, g) in ((0.962, 0.000), (0.952, 0.005), (0.924, 0.005), (0.914, 0.000)):
+    belt.append(ring_xz(0, y, 0.000, 0.187 + g, 0.142 + g, NT, 2.4))
 p.loft(belt, cap_start=False, cap_end=False, mat=1)
 emit("body_hips", p, ["mat_secondary", "mat_dark"])
 
@@ -249,17 +249,10 @@ for t in (-1.0, -0.4, 0.4, 1.0):
 for i in range(3):
     mf.append((i * 2, i * 2 + 1, i * 2 + 3, i * 2 + 2))
 p.add(mv, mf, 1)
-# jaw stubble: a band under the cheekbone, slot 1, so the lower face darkens
-sv = []
-for row, (yy, out) in enumerate(((1.646, 0.0014), (1.596, 0.0014), (1.574, 0.0014))):
-    ring = []
-    for i in range(18):
-        a = math.pi * (i / 17.0) - math.pi * 0.5        # front arc only
-        rx_, rz_, zc_ = head_at(yy)
-        px, pz = sup(a + math.pi * 1.5, 2.2)
-        ring.append((px * (rx_ - 0.0015), yy, zc_ + pz * (rz_ - 0.0015)))
-    sv.append(ring)
-p.grid(sv, mat=1)
+# There WAS a jaw-stubble band here. It is gone twice over: it was built INSIDE the
+# skull surface, so the render never showed it, and had it shown it would have been on
+# slot 1 — the slot enemy.gd paints with the accent colour — giving every thug a bright
+# red or orange chin strap. Dead geometry that would have been wrong if it were alive.
 emit("body_head", p, ["mat_trim", "mat_dark"])
 
 # ---------------------------------------------------------------- hair (short crop)
@@ -409,15 +402,18 @@ for side, sx in (("L", 1), ("R", -1)):
     emit("body_shin" + side, p, ["mat_secondary"])
 
     # work boot: high ankle collar, blunt toe, thick lugged sole on slot 1
+    # Work boot. The upper's TOP EDGE has to fall monotonically from the shaft to the
+    # toe: the first pass let it ramp steeply out of a tall heel and the profile read
+    # as an elf shoe. (z, rx, ry, cy); the top of each ring is cy + ry.
     boot = [
-        (0.098, 0.052, 0.062, 0.182),            # (z, rx, ry, cy) ankle collar top
-        (0.074, 0.058, 0.074, 0.146),
-        (0.040, 0.064, 0.076, 0.104),
-        (-0.008, 0.067, 0.068, 0.080),
-        (-0.062, 0.067, 0.058, 0.064),
-        (-0.116, 0.064, 0.049, 0.053),
-        (-0.160, 0.056, 0.041, 0.046),
-        (-0.186, 0.034, 0.030, 0.040),           # blunt toe cap
+        (0.086, 0.054, 0.052, 0.136),            # shaft top 0.188, under the trouser break
+        (0.064, 0.059, 0.060, 0.122),            # 0.182
+        (0.034, 0.064, 0.064, 0.104),            # 0.168, instep
+        (-0.012, 0.067, 0.050, 0.078),           # 0.128
+        (-0.062, 0.068, 0.041, 0.062),           # 0.103
+        (-0.112, 0.065, 0.036, 0.052),           # 0.088
+        (-0.154, 0.057, 0.031, 0.046),           # 0.077
+        (-0.178, 0.035, 0.025, 0.040),           # 0.065, blunt toe cap
     ]
     shp = resample(boot, 17)
     p = Part()

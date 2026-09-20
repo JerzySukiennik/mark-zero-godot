@@ -97,6 +97,35 @@ static var POSES := {
 		"piv_chest": { "dir": _d(0, 0.92, -0.39) },
 		"piv_neck": { "dir": _d(0, 0.72, -0.69) },
 	},
+	# MID-PUNCH. Both arms are drawn here and the ONE that threw it is pushed further by
+	# an offset — the same lesson the armour's fire pose had to learn, where a stance that
+	# always favoured the left made pressing right look broken.
+	"strike": {
+		"piv_shoulderL": { "dir": _d(0.30, -0.36, -0.88), "twist": -18.0 },
+		"piv_shoulderR": { "dir": _d(-0.30, -0.36, -0.88), "twist": 18.0 },
+		"piv_elbowL": { "dir": _d(-0.06, -0.26, -0.96) },
+		"piv_elbowR": { "dir": _d(0.06, -0.26, -0.96) },
+		"piv_hipL": { "dir": _d(0.14, -0.94, -0.30) },
+		"piv_hipR": { "dir": _d(-0.10, -0.96, 0.24) },
+		"piv_kneeL": { "dir": _d(0, -0.90, 0.44) },
+		"piv_kneeR": { "dir": _d(0, -0.93, 0.36) },
+		"piv_chest": { "dir": _d(0, 0.94, -0.34) },
+		"piv_neck": { "dir": _d(0, 0.96, -0.28) },
+	},
+	# BALLED UP. Covers the dodge roll and the backflip both: a body mid-somersault has its
+	# knees at its chest, and which way it is spinning is the ROOT's problem, not the pose's.
+	"tuck": {
+		"piv_shoulderL": { "dir": _d(0.34, -0.30, -0.89), "twist": -26.0 },
+		"piv_shoulderR": { "dir": _d(-0.34, -0.30, -0.89), "twist": 26.0 },
+		"piv_elbowL": { "dir": _d(-0.22, -0.52, -0.82) },
+		"piv_elbowR": { "dir": _d(0.22, -0.52, -0.82) },
+		"piv_hipL": { "dir": _d(0.16, -0.36, -0.92) },
+		"piv_hipR": { "dir": _d(-0.16, -0.36, -0.92) },
+		"piv_kneeL": { "dir": _d(0, -0.22, 0.98) },
+		"piv_kneeR": { "dir": _d(0, -0.22, 0.98) },
+		"piv_chest": { "dir": _d(0, 0.86, -0.51) },
+		"piv_neck": { "dir": _d(0, 0.80, -0.60) },
+	},
 	# THE THREE-POINT LANDING. Deep crouch, one hand down, the other trailed behind.
 	"land": {
 		"piv_shoulderL": { "dir": _d(0.34, -0.86, -0.38), "twist": -16.0 },
@@ -112,11 +141,11 @@ static var POSES := {
 	},
 }
 
-const NAMES := ["idle", "run", "swing", "fall", "land", "cling"]
+const NAMES := ["idle", "run", "swing", "fall", "land", "cling", "strike", "tuck"]
 ## Entering a landing is instant; leaving one is slow, because picking yourself up takes
 ## longer than hitting the ground.
-const ENTER := { "idle": 7.0, "run": 11.0, "swing": 9.0, "fall": 6.0, "land": 26.0, "cling": 14.0 }
-const LEAVE := { "idle": 6.0, "run": 8.0, "swing": 6.0, "fall": 5.0, "land": 3.0, "cling": 9.0 }
+const ENTER := { "idle": 7.0, "run": 11.0, "swing": 9.0, "fall": 6.0, "land": 26.0, "cling": 14.0, "strike": 30.0, "tuck": 24.0 }
+const LEAVE := { "idle": 6.0, "run": 8.0, "swing": 6.0, "fall": 5.0, "land": 3.0, "cling": 9.0, "strike": 9.0, "tuck": 7.0 }
 
 var blend: Dictionary = {}
 var current := "idle"
@@ -131,7 +160,10 @@ func land_hard(force: float) -> void:
 	_land_timer = maxf(_land_timer, 0.25 + force * 0.45)
 
 ## `hands` is which tethers are attached, e.g. {"R": true, "L": false}.
-func update(delta: float, model: SpiderModel, hands: Dictionary, rig: SuitRig) -> void:
+## `fight` may be null — the pose layer predates the combat layer, and the headless suites
+## drive it on its own.
+func update(delta: float, model: SpiderModel, hands: Dictionary, rig: SuitRig,
+		fight: SpiderCombat = null) -> void:
 	if rig == null:
 		return
 	rig.pose_table = POSES
@@ -143,17 +175,23 @@ func update(delta: float, model: SpiderModel, hands: Dictionary, rig: SuitRig) -
 	# "Kreci mu sie glowa w kolko" was exactly that, and the same accumulation was wrecking
 	# every other joint, which is why the walk looked deranged.
 	rig.clear_offsets()
-	_choose(delta, model, hands)
+	_choose(delta, model, hands, fight)
 	rig.set_pose_weights(blend)
-	_drive(delta, model, hands, rig)
+	_drive(delta, model, hands, rig, fight)
 
-func _choose(delta: float, model: SpiderModel, hands: Dictionary) -> void:
+func _choose(delta: float, model: SpiderModel, hands: Dictionary, fight: SpiderCombat) -> void:
 	if _land_timer > 0.0:
 		_land_timer -= delta
 	var hanging: bool = hands.get("R", false) or hands.get("L", false)
 
 	var name := "idle"
-	if model.stuck:
+	# A move that owns the body owns the pose with it, and outranks everything else.
+	if fight != null and fight.state == SpiderCombat.DODGE:
+		name = "tuck"
+	elif fight != null and (fight.state == SpiderCombat.ZIP or fight.state == SpiderCombat.LAUNCH
+			or fight.state == SpiderCombat.AIR):
+		name = "strike"
+	elif model.stuck:
 		name = "cling"
 	elif _land_timer > 0.0 and model.grounded:
 		name = "land"
@@ -173,7 +211,8 @@ func _choose(delta: float, model: SpiderModel, hands: Dictionary) -> void:
 ## The procedural layer. Everything driven by a real quantity, and nothing on a timer
 ## except the idle breath — which exists because a correct pose held perfectly still reads
 ## as a mannequin, and that is twice as wrong for this character as for the armour.
-func _drive(delta: float, model: SpiderModel, hands: Dictionary, rig: SuitRig) -> void:
+func _drive(delta: float, model: SpiderModel, hands: Dictionary, rig: SuitRig,
+		fight: SpiderCombat) -> void:
 	_bob += delta
 
 	# ---- the run cycle -----------------------------------------------------------------
@@ -260,6 +299,18 @@ func _drive(delta: float, model: SpiderModel, hands: Dictionary, rig: SuitRig) -
 		rig.add_offset("piv_shoulderR", Z_AX, 0.32 * fast)
 		rig.add_offset("piv_hipL", Z_AX, -0.20 * fast)
 		rig.add_offset("piv_hipR", Z_AX, 0.20 * fast)
+
+	# THE ARM THAT THREW IT, drawn on top of a symmetric stance so the punch reads as
+	# coming from one side — and the side alternates, which is what makes mashing look
+	# like a combination rather than one animation replayed.
+	if blend["strike"] > 0.01 and fight != null:
+		var side: String = SuitRig.SIDE[fight.last_hand]
+		var off: String = SuitRig.SIDE["R" if fight.last_hand == "L" else "L"]
+		var w: float = blend["strike"]
+		rig.add_offset("piv_shoulder" + side, X_AX, -0.85 * w)
+		rig.add_offset("piv_elbow" + side, X_AX, -0.55 * w)
+		rig.add_offset("piv_shoulder" + off, X_AX, 0.45 * w)
+		rig.add_offset("piv_chest", Y_AX, (0.26 if fight.last_hand == "R" else -0.26) * w)
 
 	# ---- he is never still --------------------------------------------------------------
 	var settled := clampf(blend["idle"] + blend["land"], 0.0, 1.0)

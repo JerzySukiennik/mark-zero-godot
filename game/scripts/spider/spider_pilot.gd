@@ -56,6 +56,7 @@ var visor: Visor
 var health := 1.0
 var legs := SpiderLegs.new()
 var poses := SpiderPoses.new()
+var fight := SpiderCombat.new()
 var shots: WebShot
 ## Counts down while the back legs are braced for a landing.
 var _brace := 0.0
@@ -69,6 +70,7 @@ var _throw := { "R": 0.0, "L": 0.0 }
 ## Trigger edges, so holding fires ONE web rather than one per frame.
 var _held := { "R": false, "L": false }
 var _buffer := { "R": 0.0, "L": 0.0 }
+var _swing_hand := "L"
 var _hops := MAX_HOPS
 ## Webs that landed this frame and still owe the player their pull into the arc.
 var _catch_pending := { "R": false, "L": false }
@@ -163,6 +165,13 @@ func _physics_process(delta: float) -> void:
 	# the swing and hauling yourself in is something you do DURING one.
 	var reel := (1.0 if Pad.pressed("up") else 0.0) - (1.0 if Pad.pressed("down") else 0.0)
 
+	# AIMING, on L2. Jurek: "L2 przytrzymanie to powinno być celowanie, czyli że jak
+	# przytrzymam L2, to jest celowanie i mogę bardzo dużo razy przyciskać R1 albo L1."
+	# So the left trigger stopped being a second web the moment it became a modifier — one
+	# finger cannot both hold a rope and steady a shot.
+	aiming = Pad.retro() > TRIGGER_FIRE
+	Engine.time_scale = AIM_TIME_SCALE if aiming else 1.0
+
 	# R1 AND L1 THROW A WEB. Separate from the triggers, which hold on to one: "R1... reka
 	# powinna tak strzelic... i to powinno z nadgarstka mu leciec takie i na scianie
 	# zostawiac". Bumpers throw, triggers hold — and keeping the two apart is what lets
@@ -195,10 +204,15 @@ func _physics_process(delta: float) -> void:
 			_held[hand] = false
 			if tether[hand].state != WebTether.IDLE:
 				tether[hand].release()
+	# ONE TRIGGER, TWO HANDS. R2 swings; which arm throws is the game's problem, not the
+	# player's — "mają być dalej dwie, tylko że się automatycznie dobierać". It alternates,
+	# so a second web thrown while the first is still out uses the free hand and you end up
+	# hanging from both, which is how a two-line swing happens without a second button.
+	if not model.stuck:
+		_service_swing(delta)
+
+	# Both ropes are stepped whatever fired them, because either hand may be carrying one.
 	for hand: String in ["R", "L"]:
-		if model.stuck:
-			break
-		_service_web(hand, delta)
 		var t: WebTether = tether[hand]
 		# WebTether's constants are already per-kilogram, so this is an acceleration and
 		# goes straight into the model. Dividing by the mass again would have made the rope
@@ -236,8 +250,12 @@ func _physics_process(delta: float) -> void:
 	if model.grounded or model.stuck:
 		_hops = MAX_HOPS
 
+	# A move owns the body while it runs. Steering out of a launcher or a dodge would make
+	# every attack cancellable into a walk, which is the difference between a fight and a
+	# set of buttons that occasionally play animations.
+	var busy := fight.state != SpiderCombat.FREE
 	var cmd := {
-		walk = move,
+		walk = Vector2.ZERO if busy else move,
 		look = look,
 		jump = model.grounded and Pad.just_pressed("up"),
 		aiming = aiming,
@@ -246,6 +264,19 @@ func _physics_process(delta: float) -> void:
 		release = model.stuck and Pad.just_pressed("up"),
 		wall_run = Pad.retro() > TRIGGER_FIRE,
 	}
+	# THE FISTS. Fed the buttons and the direction the camera is looking, and it decides
+	# what the body is doing — the pilot only asks afterwards whether it may still move.
+	var facing := -camera.global_transform.basis.z if camera != null else -model.basis_.z
+	facing.y = 0.0
+	fight.update(delta, model, {
+		walk = move,
+		facing = facing.normalized() if facing.length_squared() > 1e-4 else -model.basis_.z,
+		light = Pad.just_pressed("light"),
+		heavy = Pad.pressed("heavy"),
+		heavy_down = Pad.just_pressed("heavy"),
+		dodge = Pad.just_pressed("dodge"),
+	}, get_tree())
+
 	if _stage != null:
 		model.ground_y = _stage.ground_y
 	# Handed in every frame so the model can do its own sweeps. It is a RefCounted and has
@@ -292,23 +323,39 @@ func _physics_process(delta: float) -> void:
 ## game does and the better fit for an analogue trigger, which has a natural "still holding
 ## it" state that a face button does not — and it frees both thumbs for the sticks, which
 ## during a swing are steering and looking.
-func _service_web(hand: String, delta: float) -> void:
-	var t: WebTether = tether[hand]
-	_throw[hand] = maxf(0.0, _throw[hand] - delta * 4.0)
-
-	# R2 is the right hand, L2 the left.
-	var pull: float = Pad.thrust() if hand == "R" else Pad.retro()
+## R2, for both hands. Picks whichever is free, preferring to alternate.
+func _service_swing(delta: float) -> void:
+	var pull := Pad.thrust()
 	var held := pull > TRIGGER_FIRE
-	var was: bool = _held[hand]
-	_held[hand] = held
+	var was: bool = _held["R"] or _held["L"]
 
 	if not held:
-		if t.state != WebTether.IDLE:
-			t.release()
-		return
-	if was or t.state != WebTether.IDLE:
+		for hand: String in ["R", "L"]:
+			_held[hand] = false
+			_throw[hand] = maxf(0.0, _throw[hand] - delta * 4.0)
+			if tether[hand].state != WebTether.IDLE:
+				tether[hand].release()
 		return
 
+	for hand: String in ["R", "L"]:
+		_throw[hand] = maxf(0.0, _throw[hand] - delta * 4.0)
+	if was:
+		return
+
+	# Fresh press: use the hand that is not already carrying one, alternating otherwise.
+	var pick := "R" if _swing_hand == "L" else "L"
+	if tether[pick].state != WebTether.IDLE:
+		pick = "R" if pick == "L" else "L"
+	if tether[pick].state != WebTether.IDLE:
+		return
+	_swing_hand = pick
+	_held[pick] = true
+	_fire_swing(pick)
+
+## Throws ONE web from one hand. The trigger handling lives in _service_swing now; this
+## is only the part that finds something to stick to and sticks to it.
+func _fire_swing(hand: String) -> void:
+	var t: WebTether = tether[hand]
 	# Aim from the CAMERA, not from the hand. The player is pointing with the reticle, and
 	# a cone taken from the wrist disagrees with it by several degrees at a hundred metres —
 	# which feels like the web missing something you were plainly looking at.
@@ -445,7 +492,7 @@ func _pose(delta: float) -> void:
 	poses.update(delta, model, {
 		"R": tether["R"].state == WebTether.ATTACHED,
 		"L": tether["L"].state == WebTether.ATTACHED,
-	}, skel)
+	}, skel, fight)
 
 	# THE THROWING ARM, layered on top: the hand that fired reaches along its web, so which
 	# hand threw it is readable without looking at the HUD.
@@ -501,6 +548,10 @@ var _hurt_flash := 0.0
 func take_hit(amount: float, from: Vector3, kind := "") -> void:
 	if _hurt_cool > 0.0 or health <= 0.0:
 		return
+	# A dodge is worth most of a hit but not all of it: true invulnerability frames make
+	# one button the answer to everything, and then there is only one button.
+	if fight != null:
+		amount *= fight.damage_scale()
 	_hurt_cool = HURT_GRACE
 	health = clampf(health - amount / MAX_HP, 0.0, 1.0)
 	_hurt_flash = 0.35

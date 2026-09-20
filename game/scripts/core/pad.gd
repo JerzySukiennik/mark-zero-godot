@@ -29,6 +29,12 @@ const BUTTONS := {
 	"fire_r":      [JOY_BUTTON_RIGHT_SHOULDER],   # R1 - right palm
 	"fire_l":      [JOY_BUTTON_LEFT_SHOULDER],    # L1 - left palm
 	"turret":      [JOY_BUTTON_X],                # square - shoulder turret
+	# Spider-Man's melee. Square is a punch tapped and a launcher held; triangle is the
+	# reaching strike; circle dodges. They double up with the armour's bindings on purpose —
+	# the two heroes never share a body, so the same button can mean two things.
+	"heavy":       [JOY_BUTTON_X],
+	"light":       [JOY_BUTTON_Y],
+	"dodge":       [JOY_BUTTON_B],
 	"menu":        [JOY_BUTTON_TOUCHPAD, JOY_BUTTON_MISC1, JOY_BUTTON_START],
 	"up":          [JOY_BUTTON_A, JOY_BUTTON_DPAD_UP],
 	# Descend used to share L1 with the left repulsor, so every left-hand shot also dropped
