@@ -78,6 +78,8 @@ const SHOT_DECAY := 5.0
 const FIRE_BUFFER := 0.22
 var _net_thrust := 0.0
 var armour: ArmourDamage
+## The two things this particular armour can do that no other one can. See gadgets.gd.
+var gadgets: Gadgets
 ## Tony, once there is nothing left. Held rather than spawned on demand so the swap is
 ## instant — a frame with no body at all reads as the player being deleted.
 var pilot_body: Node3D
@@ -95,6 +97,9 @@ func setup(id: int, armor: String, stage: Stage) -> void:
 func _ready() -> void:
 	add_to_group("player")
 	add_to_group("hittable")
+	gadgets = Gadgets.new()
+	gadgets.name = "Gadgets"
+	add_child(gadgets)
 	marks = ThreatMarks.new()
 	marks.name = "ThreatMarks"
 	# In the WORLD, so the bracket does not inherit a body that banks and tumbles.
@@ -189,6 +194,8 @@ func _load_rig(id: String) -> void:
 	if armour != null:
 		armour.bind(rig, skel)
 		armour.ground_y = _stage.ground_y if _stage != null else 0.0
+	if gadgets != null:
+		gadgets.bind(skel, model, id)
 	if visor != null and visor.hud != null:
 		visor.hud.set_armor_name(SuitSpecs.get_spec(id).name)
 
@@ -256,6 +263,16 @@ func _step_local(delta: float) -> void:
 	# any real deflection of the stick while already flying all count as asking.
 	# WITH NO SUIT THERE IS NO FLYING. He walks, and that is all — which is the whole
 	# point of the armour coming apart rather than a number reaching zero.
+	# THE STICKS ARE ALSO THE GADGETS. L3 is what this armour does to survive, R3 is what
+	# it does to the other man, and both change completely with the suit — see gadgets.gd.
+	# Stripped, Tony has neither, because neither of them is Tony.
+	if gadgets != null and not stripped:
+		if Pad.just_pressed("hover"):
+			gadgets.press("left")
+		elif Pad.just_pressed("faceplate"):
+			gadgets.press("right")
+		model.agility = gadgets.agility()
+
 	if stripped:
 		on_foot_only = true
 	var on_foot := (model.grounded and not Pad.pressed("up")) or stripped
@@ -589,6 +606,13 @@ var _hurt_flash := 0.0
 
 func take_hit(amount: float, from: Vector3, kind := "") -> void:
 	if _hurt_cool > 0.0 or health <= 0.0:
+		return
+	# WHATEVER IS UP EATS SOME OF IT FIRST. A shield that only works from the front is a
+	# decision; one that works everywhere is just a bigger health bar.
+	if gadgets != null:
+		amount *= gadgets.damage_through(from, global_position)
+	if amount <= 0.01:
+		Sfx.play("hit_metal", global_position, -8.0, 1.9)
 		return
 	_hurt_cool = HURT_GRACE
 	health = clampf(health - amount / MAX_HP, 0.0, 1.0)

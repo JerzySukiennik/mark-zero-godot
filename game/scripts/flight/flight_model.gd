@@ -457,15 +457,20 @@ func _hover(delta: float, cmd: Dictionary) -> Vector3:
 		basis_.inverse() * corr_world / 9.0, 1.0 - exp(-delta / 0.08))
 	return body_extra
 
+## Multiplier on every rotation rate, driven from outside by whatever gadget is up.
+var agility := 1.0
+
 func _rotate(delta: float, cmd: Dictionary) -> void:
 	var look: Vector2 = cmd.get("look", Vector2.ZERO)
 	# Rate limited by the armour, and the limit falls off with speed: a suit doing 300 m/s
 	# cannot pivot like one hovering, and pretending otherwise is what makes flight feel
 	# weightless. rate_falloff_ref is the speed at which authority is halved.
 	var falloff := 1.0 / (1.0 + speed / spec.rate_falloff_ref)
-	yaw -= look.x * spec.max_rate * falloff
-	pitch = clampf(pitch - look.y * spec.max_rate * falloff, -1.45, 1.45)
-	roll += cmd.get("roll", 0.0) * spec.roll_rate * delta
+	# `agility` is the Mark II's stabilisers and nothing else: the prototype's one trick is
+	# that for a few seconds it handles like a suit that works.
+	yaw -= look.x * spec.max_rate * falloff * agility
+	pitch = clampf(pitch - look.y * spec.max_rate * falloff * agility, -1.45, 1.45)
+	roll += cmd.get("roll", 0.0) * spec.roll_rate * agility * delta
 
 	# Auto-level, weak on purpose: strong enough that the horizon comes back on its own,
 	# weak enough that a deliberate roll holds.

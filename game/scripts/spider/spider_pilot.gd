@@ -364,7 +364,17 @@ func _physics_process(delta: float) -> void:
 		# catches himself on, so they belong to being airborne rather than to a button.
 		if _brace > 0.0:
 			_brace -= delta
-		legs.drive(delta, (not model.grounded) or _brace > 0.0, skel)
+		# R3 SENDS THEM AFTER PEOPLE. Off the ground they are already out, so on the
+		# pavement this is the only thing that deploys them — and the only attack Spider-Man
+		# has that answers somebody standing behind him.
+		if Pad.just_pressed("faceplate") and not legs.lashing():
+			legs.begin_lash(self, get_tree().get_nodes_in_group("enemy"))
+			Sfx.play("thwip", global_position, -5.0, 0.7)
+		for who in legs.service_lash(delta):
+			if is_instance_valid(who) and who.has_method("take_hit"):
+				who.take_hit(SpiderLegs.LASH_DAMAGE, global_position, "legs")
+				Sfx.play("punch", (who as Node3D).global_position, -1.0, 1.25)
+		legs.drive(delta, (not model.grounded) or _brace > 0.0, skel, self)
 		skel.update_pose(delta)
 
 	if was_down and model.grounded:

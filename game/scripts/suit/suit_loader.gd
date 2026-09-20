@@ -104,7 +104,12 @@ const MIN_SPECULAR := 0.55
 ## little emission on the plates is the one lever that touches the suit and nothing else.
 ## It is the same trick as a rim light on a film set: not physical, and it is what makes a
 ## dark subject readable against a dark background.
-const PLATE_GLOW := 0.11
+## Was 0.11 while the operator was ADD, where it meant a flat white 0.11 on top of every
+## plate. Under MULTIPLY it means "0.11 OF the plate's own colour", which is a fraction of
+## a dark texture and therefore almost nothing — the armour measured 0.082 luminance, down
+## from 0.195. Same number, completely different quantity. Raised until the plates read
+## again, and it is still tinted, so nothing greys out.
+const PLATE_GLOW := 0.55
 ##
 ## NOT by lifting albedo. That was tried at 1.75 and at 1.18 and both rendered the armour
 ## as a featureless white blob, which is not a tuning miss — for a METAL, albedo_color is
@@ -135,6 +140,15 @@ static func _polish(n: Node) -> void:
 						sm.emission_enabled = true
 						sm.emission_texture = sm.albedo_texture
 						sm.emission = Color(1, 1, 1)
+						# MULTIPLY, AND THIS LINE IS THE WHOLE POINT. Godot defaults the
+						# operator to ADD, and ADD computes (emission.rgb + texture) *
+						# energy — so emission = white added a FLAT 0.11 of untinted light
+						# to every plate on every suit, which is a grey veil and precisely
+						# the thing the comment above swore it was avoiding. Jurek: "stroje
+						# są strasznie szare i grumpy." MULTIPLY gives texture * 0.11,
+						# which is the tinted lift that was always meant: a red panel
+						# glows red, a gold one gold, and nothing goes grey.
+						sm.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
 						sm.emission_energy_multiplier = PLATE_GLOW
 	for c in n.get_children():
 		_polish(c)

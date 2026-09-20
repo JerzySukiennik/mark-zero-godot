@@ -33,6 +33,9 @@ class Round:
 	## threat the player can answer.
 	var chase: Node3D = null
 	var launched := 0.0
+	## Set when the PLAYER fired it (the Mark III's micro-salvo). The only thing it
+	## changes is that the splash skips the man who launched it.
+	var friendly := false
 
 var _pool: Array[Round] = []
 var _built := false
@@ -78,7 +81,7 @@ func _take() -> Round:
 ## jakby gonić za tym Spidermanem albo Iron Manem" — slow, obvious and persistent, so the
 ## answer is to move rather than to have been standing somewhere else.
 func fire(from: Vector3, dir: Vector3, speed: float, damage: float, blast := 0.0,
-		chase: Node3D = null) -> bool:
+		chase: Node3D = null, friendly := false) -> bool:
 	var r := _take()
 	if r == null:
 		return false
@@ -89,6 +92,7 @@ func fire(from: Vector3, dir: Vector3, speed: float, damage: float, blast := 0.0
 	r.blast = blast
 	r.rocket = blast > 0.0
 	r.chase = chase if r.rocket else null
+	r.friendly = friendly
 	r.launched = 0.0
 	r.node.visible = true
 	r.node.global_position = from
@@ -161,6 +165,8 @@ func _land(r: Round, at: Vector3, collider) -> void:
 			if not (n is Node3D):
 				continue
 			var d: float = (n as Node3D).global_position.distance_to(at)
+			if r.friendly and (n as Node).is_in_group("player"):
+				continue
 			if d < r.blast:
 				_apply(n, r.damage * (1.0 - d / r.blast), at)
 		Sfx.play("explosion", at, 2.0)
@@ -206,3 +212,9 @@ func lock_on(who: Node3D) -> float:
 		var near: float = clampf(1.0 - d / 60.0, 0.0, 1.0)
 		best = maxf(best, near)
 	return best
+
+## Everything tracking anybody forgets them. Chaff, and the Mark III's whole answer to a
+## rocket already in the air.
+func break_locks() -> void:
+	for r: Round in _pool:
+		r.chase = null

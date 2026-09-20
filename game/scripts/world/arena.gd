@@ -1,3 +1,4 @@
+class_name Arena
 extends Node3D
 ## The playable scene: a city, a sky, and however many suits are in the room.
 ##
@@ -34,7 +35,7 @@ func _ready() -> void:
 	pause.name = "PauseMenu"
 	add_child(pause)
 
-	_sky()
+	build_sky(self)
 	# DEFERRED. Switching hero frees the entity whose own menu emitted the change, from
 	# inside that signal; rebuilding the roster on the next idle frame keeps the teardown
 	# and the rebuild from overlapping.
@@ -43,22 +44,45 @@ func _ready() -> void:
 	print("[mark zero] ready — %d suit(s), camera %s" % [
 		suits.size(), "yes" if get_viewport().get_camera_3d() != null else "NONE"])
 
-func _sky() -> void:
+## The LOOK OF THE GAME, in one place and static so every preview tool renders through this
+## exact code. A preview with its own copy of the lighting proves nothing about the game —
+## which is how the armour passed a render while being grey in the thing Jurek plays.
+static func build_sky(parent: Node) -> void:
 	var env := Environment.new()
 	var sky := Sky.new()
 	var mat := ProceduralSkyMaterial.new()
 	# A brighter sky is not a mood choice here: it IS the suit's key light, because a sky
 	# this size is the only large source in an empty scene.
-	mat.sky_top_color = Color(0.10, 0.14, 0.22)
-	mat.sky_horizon_color = Color(0.30, 0.34, 0.40)
-	mat.ground_bottom_color = Color(0.05, 0.05, 0.06)
-	mat.ground_horizon_color = Color(0.16, 0.17, 0.19)
+	# WARM, AND NOT ONE COLOUR. Jurek: "stroje są strasznie szare i grumpy" — and they were,
+	# because the sky was a flat blue-grey from top to bottom. A polished metal figure is
+	# almost entirely a mirror of the sky, so a sky with no colour in it hands the armour no
+	# colour to reflect, whatever the albedo of its plates says.
+	#
+	# The fix is a sky with a GRADIENT the metal can pick up: cold indigo overhead and a hot
+	# amber band at the horizon. Every curved plate then catches both, which is what makes a
+	# suit read as gold and crimson rather than as a grey mannequin. It is also what a city
+	# at dusk actually looks like, so it costs nothing in believability.
+	mat.sky_top_color = Color(0.08, 0.14, 0.28)
+	mat.sky_horizon_color = Color(0.44, 0.26, 0.21)
+	mat.ground_bottom_color = Color(0.06, 0.05, 0.05)
+	mat.ground_horizon_color = Color(0.22, 0.13, 0.10)
+	# A tight, bright sun disc in that band — a second highlight rolling over the plates as
+	# he banks, and the single cheapest thing that makes metal look like metal.
+	mat.sun_angle_max = 6.0
+	mat.sun_curve = 0.12
+	# THE BAND HAS TO STAY LOW. Left at the default the horizon colour climbs most of the
+	# way up the dome and the whole picture turns into one orange wash — which is the same
+	# mistake as the grey one, just a warmer flavour of it. A tight curve keeps the sky
+	# blue overhead and the heat in a strip, so the two colours can play off each other
+	# across a curved plate instead of one of them winning.
+	mat.sky_curve = 0.02
+	mat.ground_curve = 0.04
 	# THE lever for a metal subject. Measured on the Mark I hovering: 1.25 gave a suit
 	# luminance of 0.195 and 2.60 gives 0.295, which is the difference between a black
 	# silhouette and readable plates and panel lines. Raising the LIGHTS did nothing for
 	# two rounds because metal has almost no diffuse response — what you see on it is the
 	# sky, so the sky is what has to be brighter.
-	mat.sky_energy_multiplier = 2.60
+	mat.sky_energy_multiplier = 3.10
 	sky.sky_material = mat
 	env.background_mode = Environment.BG_SKY
 	env.sky = sky
@@ -79,40 +103,52 @@ func _sky() -> void:
 	# against a bright sky needs — raising exposure alone would just clip the sky.
 	env.adjustment_enabled = true
 	env.adjustment_brightness = 1.06
-	env.adjustment_contrast = 1.04
-	env.adjustment_saturation = 1.10
+	env.adjustment_contrast = 1.08
+	# Pushed hard on purpose. The whole complaint was that the picture had no colour in it,
+	# and a scene lit almost entirely by a sky answers saturation more than it answers any
+	# light's energy.
+	env.adjustment_saturation = 1.22
 	# Haze over a city this size is not a mood, it is depth: without it the far end of the
 	# island reads as being the same distance away as the next block.
 	env.fog_enabled = true
-	env.fog_density = 0.0009
-	env.fog_light_color = Color(0.16, 0.18, 0.22)
+		# CUT BY HALF. With a warm sky the haze stopped being depth and became a coat of paint:
+	# at 0.0009 every building, the plate and the far half of the frame all settled on the
+	# same dusty rose, which is a wash by another route.
+	env.fog_density = 0.00040
+	# The haze takes the horizon's colour rather than a neutral grey, so distance warms the
+	# picture instead of draining it.
+	env.fog_light_color = Color(0.22, 0.21, 0.27)
 
 	var we := WorldEnvironment.new()
 	we.environment = env
-	add_child(we)
+	parent.add_child(we)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-42, -125, 0)
+	sun.rotation_degrees = Vector3(-24, -125, 0)
 	# STRONG, now that the world itself is near-black. Directional light is the one lever
 	# that separates the two: the plate's albedo is 0.03 so it barely answers, while the
 	# armour is polished metal and answers hard. That is how the map stays black with white
 	# lines while the suit stops being a silhouette — both of which Jurek has asked for, and
 	# which turning the SKY up could not do at once, because the sky lights everything.
-	sun.light_energy = 2.2
-	sun.light_color = Color(1.0, 0.96, 0.90)
+	sun.light_energy = 2.5
+	# Low and warm, to match the band it is sitting in.
+	sun.light_color = Color(1.0, 0.82, 0.60)
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 400.0
-	add_child(sun)
+	parent.add_child(sun)
 
 	# A cool fill from the opposite side, with no shadow. Without it the unlit side of the
 	# armour goes to black and the silhouette loses all its shape — the single biggest reason
 	# a metal figure reads as "too dark" even when the key light is strong.
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-18, 55, 0)
-	fill.light_energy = 1.05
-	fill.light_color = Color(0.72, 0.82, 1.0)
+	fill.light_energy = 1.15
+	# Deliberately the OPPOSITE colour to the sun. Warm key against cool fill is what gives
+	# a curved metal surface two colours to separate its forms with; two white lights give
+	# it one, and one is grey.
+	fill.light_color = Color(0.46, 0.62, 1.0)
 	fill.shadow_enabled = false
-	add_child(fill)
+	parent.add_child(fill)
 
 func _sync_suits() -> void:
 	# Anyone in the roster who has no suit yet gets one; anyone who left loses theirs.
