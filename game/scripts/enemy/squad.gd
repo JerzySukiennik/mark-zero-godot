@@ -13,8 +13,11 @@ const MAX_ALIVE := 14
 ## Seconds between spawns, and how much a wave tightens it.
 const SPAWN_GAP := 2.2
 ## Where they come from, relative to whoever they are after.
-const RING_MIN := 34.0
-const RING_MAX := 78.0
+## Close enough that a wave is something you notice arriving. At 34-78 m the first one
+## was a dark speck the size of a few pixels and the player's honest reading of the game
+## was that nothing had happened.
+const RING_MIN := 16.0
+const RING_MAX := 38.0
 
 var guns: Gunfire
 var wave := 1
@@ -112,3 +115,8 @@ func standing() -> int:
 		if is_instance_valid(e) and e.state != Enemy.DOWN:
 			n += 1
 	return n
+
+## Everything on the plate right now, whatever spawned it. Used by the probe so a count
+## can be compared between machines without trusting this class's own bookkeeping.
+func on_field() -> int:
+	return get_tree().get_nodes_in_group("enemy").size() if is_inside_tree() else 0

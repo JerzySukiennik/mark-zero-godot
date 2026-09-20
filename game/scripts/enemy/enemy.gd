@@ -98,7 +98,18 @@ func _tint(n: Node) -> void:
 					var pick: Color = spec["trim"] if i % 3 == 1 else spec["body"]
 					m.albedo_color = pick
 					m.albedo_texture = null
-					m.emission_enabled = false
+					# LIT FROM WITHIN, a little. The map is deliberately near-black with
+					# white lines, and these were authored dark on top of that — so they
+					# spawned, walked in and were measured, and Jurek still reported "nie
+					# ma". Five of them were on the plate at the time. A dark figure on a
+					# dark floor at forty metres is not there as far as the player is
+					# concerned, and being correct in a group count is no defence.
+					#
+					# Same lever as the armour: emission touches the character and nothing
+					# else, where turning the lights up would take the map with it.
+					m.emission_enabled = true
+					m.emission = pick
+					m.emission_energy_multiplier = 0.34
 					m.metallic = 0.10
 					m.roughness = 0.72
 					(n as MeshInstance3D).set_surface_override_material(i, m)

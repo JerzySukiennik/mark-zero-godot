@@ -20,34 +20,34 @@ static var KINDS := {
 	"brawler": {
 		name = "THUG", hp = 34.0, speed = 6.4, reach = 2.0, web = 1,
 		damage = 9.0, rate = 0.85, ranged = false, scale = 1.0,
-		body = Color(0.20, 0.22, 0.28), trim = Color(0.42, 0.14, 0.14),
+		body = Color(0.38, 0.40, 0.50), trim = Color(0.78, 0.22, 0.20),
 	},
 	# A knife is a fist with better numbers and a worse temper: faster, closer, hurts more.
 	"knifer": {
 		name = "KNIFE", hp = 28.0, speed = 7.8, reach = 1.8, web = 1,
 		damage = 14.0, rate = 0.62, ranged = false, scale = 0.98,
-		body = Color(0.16, 0.17, 0.20), trim = Color(0.70, 0.72, 0.78),
+		body = Color(0.30, 0.32, 0.38), trim = Color(0.92, 0.94, 1.00),
 	},
 	# The first one that can hurt you from where you are hovering.
 	"pistol": {
 		name = "PISTOL", hp = 26.0, speed = 5.2, reach = 26.0, web = 1,
 		damage = 6.0, rate = 0.95, ranged = true, muzzle_speed = 150.0,
 		spread = 0.045, burst = 1, scale = 1.0,
-		body = Color(0.18, 0.20, 0.26), trim = Color(0.30, 0.30, 0.34),
+		body = Color(0.34, 0.38, 0.52), trim = Color(0.62, 0.64, 0.70),
 	},
 	# Bursts, further out, and enough of them will take a suit apart.
 	"rifle": {
 		name = "RIFLE", hp = 32.0, speed = 4.6, reach = 48.0, web = 2,
 		damage = 5.0, rate = 1.35, ranged = true, muzzle_speed = 210.0,
 		spread = 0.028, burst = 3, scale = 1.02,
-		body = Color(0.15, 0.18, 0.22), trim = Color(0.34, 0.36, 0.30),
+		body = Color(0.30, 0.40, 0.34), trim = Color(0.72, 0.76, 0.46),
 	},
 	# Slow, loud, and the only thing here that punishes hovering still.
 	"rpg": {
 		name = "RPG", hp = 30.0, speed = 3.8, reach = 70.0, web = 2,
 		damage = 26.0, rate = 3.4, ranged = true, muzzle_speed = 52.0,
 		spread = 0.01, burst = 1, rocket = true, blast = 7.0, scale = 1.04,
-		body = Color(0.20, 0.17, 0.14), trim = Color(0.48, 0.34, 0.12),
+		body = Color(0.46, 0.33, 0.18), trim = Color(1.00, 0.62, 0.16),
 	},
 	# THE BIG ONE. Jurek: "dużych (których spiderman trudniej związać)". Four web hits
 	# instead of one, and the webbing wears off him faster than it does off anyone else —
@@ -56,7 +56,7 @@ static var KINDS := {
 		name = "BRUTE", hp = 150.0, speed = 4.8, reach = 3.0, web = 4,
 		damage = 22.0, rate = 1.5, ranged = false, scale = 1.45,
 		web_decay = 2.2, knockback_resist = 0.82,
-		body = Color(0.13, 0.14, 0.16), trim = Color(0.55, 0.30, 0.10),
+		body = Color(0.30, 0.31, 0.34), trim = Color(1.00, 0.45, 0.10),
 	},
 }
 

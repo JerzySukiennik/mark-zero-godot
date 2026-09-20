@@ -38,6 +38,10 @@ var shots_r := 16
 var shots_max := 16
 var locked_l := false
 var locked_r := false
+## How many are still standing. Fed in by the arena rather than counted here — a panel
+## that reaches into the scene tree cannot be rendered by the screenshot tool or asserted
+## by a test, which this project has paid for three times.
+var threats := 0
 var turret := 1.0
 var _turret_show := 0.0           ## seconds left on the turret bar
 var _sway := Vector2.ZERO
@@ -118,6 +122,18 @@ func _draw() -> void:
 	if _mach > 0.55:
 		_label(o + Vector2(136 * u, s.y - 54 * u), "MACH %.2f" % _mach,
 			AMBER if _mach >= 1.0 else Color(0.6, 0.72, 0.8), int(14 * u))
+
+	# ---- bottom right: what is still coming ----------------------------------------
+	# Small, and only there when it is non-zero. The first wave spawned, walked in and was
+	# measured while the player's honest reading was that nothing had happened; a number
+	# on the glass is the cheapest possible answer to "is this thing even on".
+	if threats > 0:
+		var tw := 150.0 * u
+		_panel(Rect2(o + Vector2(s.x - tw, s.y - 74 * u), Vector2(tw, 44 * u)))
+		_label(o + Vector2(s.x - tw + 14 * u, s.y - 52 * u), "HOSTILES",
+			Color(0.6, 0.72, 0.8), int(12 * u))
+		_label(o + Vector2(s.x - tw + 14 * u, s.y - 32 * u), "%d" % threats,
+			RED if threats >= 8 else AMBER, int(24 * u))
 
 	# ---- centre: the reticle, only while aiming ------------------------------------
 	if _aiming > 0.01:

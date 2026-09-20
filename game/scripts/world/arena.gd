@@ -143,12 +143,24 @@ func _sync_suits() -> void:
 			suits.erase(id)
 
 func _physics_process(delta: float) -> void:
+	# BEFORE the online check. This sat after it, which meant the readout only ever
+	# appeared in a multiplayer room — and the whole reason it exists is a player alone on
+	# the plate asking whether anything had spawned at all.
+	#
+	# Told, not fetched: the HUD is deliberately unable to reach into the scene tree.
+	var standing: int = squad.standing() if squad != null else 0
+	for pid in suits:
+		var pilot = suits[pid]
+		if pilot != null and pilot.get("visor") != null and pilot.visor.hud != null:
+			pilot.visor.hud.threats = standing
+
 	if not Net.online:
 		return
 	_publish_acc += delta
 	if _publish_acc < 1.0 / PUBLISH_HZ:
 		return
 	_publish_acc = 0.0
+
 	for id in suits:
 		# Only the armour syncs for now; Spider-Man's remote representation comes with the
 		# Iron Spider model, and publishing a body nobody can see yet buys nothing.
