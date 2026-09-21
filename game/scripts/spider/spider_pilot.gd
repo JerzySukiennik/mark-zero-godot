@@ -169,6 +169,7 @@ func _load_body() -> void:
 
 func _physics_process(delta: float) -> void:
 	if not is_mine:
+		_step_remote(delta)
 		return
 
 	_hurt_cool = maxf(0.0, _hurt_cool - delta)
@@ -774,3 +775,127 @@ func _nearest_thug() -> Enemy:
 			best_d = d
 			best = e
 	return best
+
+# ---- replication -------------------------------------------------------------------------
+
+## WHAT A WATCHER NEEDS TO SEE SPIDER-MAN.
+##
+## Until now nothing of him crossed the network at all — the arena published the armour
+## only, so the Iron Man player watched a Spider-Man frozen at the spawn point for the
+## whole match.
+##
+## Same rule as the suit (see SuitPilot.publish): the animation is NOT sent. What goes
+## across is the handful of values his pose system, his legs and his web lines read, and
+## the receiving end runs the SAME pose code. One pipeline, so new stances replicate for
+## free.
+##
+## He needs LESS than the armour in one way and more in another. Less, because his body is
+## drawn with the same basis the poses reason about — there is no separate lean to send.
+## More, because two web lines have to be drawn between his hands and two points in the
+## world, and a rope is not derivable from a transform: the anchors themselves have to
+## travel.
+
+const F_GROUNDED := 1
+const F_STUCK := 2
+const F_SWINGING := 4
+const F_WEB_R := 8
+const F_WEB_L := 16
+const F_LEGS := 32
+const F_HAND_R := 64
+const F_LASH := 128
+
+var _net_pos := Vector3.ZERO
+var _net_basis := Basis.IDENTITY
+var _net_vel := Vector3.ZERO
+var _net_flags := 0
+var _net_anchor := { "R": Vector3.ZERO, "L": Vector3.ZERO }
+var _net_fight := 0
+
+func publish() -> void:
+	if not is_mine or not Net.online:
+		return
+	var flags := 0
+	if model.grounded: flags |= F_GROUNDED
+	if model.stuck: flags |= F_STUCK
+	if model.swinging: flags |= F_SWINGING
+	if tether["R"].state == WebTether.ATTACHED: flags |= F_WEB_R
+	if tether["L"].state == WebTether.ATTACHED: flags |= F_WEB_L
+	if legs.out > 0.01: flags |= F_LEGS
+	if fight.last_hand == "R": flags |= F_HAND_R
+	if legs.lashing(): flags |= F_LASH
+	_sync.rpc(model.position, model.basis_.get_rotation_quaternion(), model.velocity,
+		flags, tether["R"].anchor_point(), tether["L"].anchor_point(), fight.state)
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _sync(p: Vector3, q: Quaternion, vel: Vector3, flags: int,
+		ar: Vector3, al: Vector3, fight_state: int) -> void:
+	_net_pos = p
+	_net_basis = Basis(q)
+	_net_vel = vel
+	_net_flags = flags
+	_net_anchor["R"] = ar
+	_net_anchor["L"] = al
+	_net_fight = fight_state
+
+func _step_remote(delta: float) -> void:
+	# The same 120 ms smoothing the armour uses: a dropped packet is invisible, a dodge you
+	# watched is a dodge that happened.
+	var k := 1.0 - exp(-delta / 0.12)
+	global_position = global_position.lerp(_net_pos, k)
+	if model == null:
+		return
+
+	model.position = global_position
+	model.basis_ = model.basis_.slerp(_net_basis, k)
+	model.velocity = model.velocity.lerp(_net_vel, k)
+	model.grounded = (_net_flags & F_GROUNDED) != 0
+	model.stuck = (_net_flags & F_STUCK) != 0
+	model.swinging = (_net_flags & F_SWINGING) != 0
+	model.ground_speed = Vector2(model.velocity.x, model.velocity.z).length()
+	# A distance clock, like the armour's — derived here rather than sent.
+	if model.grounded and model.ground_speed > 0.05:
+		model.stride_phase += model.ground_speed * delta * 0.55
+
+	# The fight state drives the strike and tuck stances, so it is fed straight in.
+	fight.state = _net_fight
+	fight.last_hand = "R" if (_net_flags & F_HAND_R) != 0 else "L"
+
+	if rig != null:
+		rig.position = Vector3(0, -FEET_DROP, 0)
+		rig.basis = model.basis_
+
+	if skel != null:
+		poses.update(delta, model, {
+			"R": (_net_flags & F_WEB_R) != 0,
+			"L": (_net_flags & F_WEB_L) != 0,
+		}, skel, fight)
+		# The back legs answer the same bit the local ones answer to, and a flurry is
+		# started with no targets: the jab motion is the point, and inventing damage on a
+		# machine that does not own this body would hit people twice.
+		if (_net_flags & F_LASH) != 0 and not legs.lashing():
+			legs.begin_lash(self, [])
+		legs.service_lash(delta)
+		legs.drive(delta, (_net_flags & F_LEGS) != 0, skel, self)
+		skel.update_pose(delta)
+
+	_draw_webs_remote()
+
+## The ropes, drawn from THIS body's hands to the anchors that were sent. It cannot go
+## through _draw_webs because that one reads the local WebTether objects, which on a remote
+## body are empty — the physics of the swing belongs to the machine flying it.
+func _draw_webs_remote() -> void:
+	var cam := camera.global_position if camera != null else global_position
+	for hand: String in ["R", "L"]:
+		var w: WebLine = line[hand]
+		if w == null:
+			continue
+		var bit: int = F_WEB_R if hand == "R" else F_WEB_L
+		if (_net_flags & bit) == 0:
+			w.draw_web(Vector3.ZERO, Vector3.ZERO, 0.0, 0.0, cam)
+			continue
+		var from := _hand_point(hand)
+		var to: Vector3 = _net_anchor[hand]
+		# Slack from the geometry we can see, rather than from a rest length nobody sent:
+		# a rope that is shorter than the gap is taut, and that is the only cue that matters.
+		var slack := maxf(0.0, from.distance_to(to) * 0.06)
+		w.draw_web(from, to, slack, from.distance_to(to), cam)

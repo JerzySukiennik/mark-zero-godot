@@ -208,9 +208,10 @@ func _physics_process(delta: float) -> void:
 	_publish_acc = 0.0
 
 	for id in suits:
-		# Only the armour syncs for now; Spider-Man's remote representation comes with the
-		# Iron Spider model, and publishing a body nobody can see yet buys nothing.
-		if suits[id] is SuitPilot:
+		# BOTH HEROES. This used to publish the armour only, on the grounds that Spider-Man
+		# had no remote body worth sending — which stopped being true when the Iron Spider
+		# model landed, and left the Iron Man player watching a statue for a whole match.
+		if suits[id].has_method("publish"):
 			suits[id].publish()
 
 static func _hero_of(n: Node) -> String:
