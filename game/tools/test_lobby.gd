@@ -9,6 +9,9 @@ func _ok(c: bool, m: String) -> void:
 	print(("  ok    " if c else "  FAIL  ") + m)
 
 func _ready() -> void:
+	call_deferred("_run")
+
+func _run() -> void:
 	Net.unlock_heroes()
 	Net.players = { 1: { name = "JUREK", armor = "mk1", hero = "ironman" } }
 	Net.local_hero = "ironman"
@@ -84,6 +87,25 @@ func _ready() -> void:
 	_ok(Net.hero_taken_by("spiderman") == "NAREK",
 		"and the lobby can say who has it")
 	_ok(Net.hero_taken_by("ironman") == "", "but not report your own side as taken")
+
+	print("=== everyone in the lobby is listening for the start, not just the host ===")
+	# The bug: the listener was hooked up inside the START MATCH handler, which runs only
+	# on the machine that pressed it. Only the host presses it, so on every other machine
+	# the signal arrived with nobody attached and the player sat in the lobby forever.
+	# Asked of a lobby that has been OPENED and nothing else, which is exactly the state a
+	# joining player is in.
+	Net.unlock_heroes()
+	var menu: Node = load("res://scenes/ui/main_menu.tscn").instantiate()
+	add_child(menu)
+	await get_tree().process_frame
+	menu.call("_open_lobby")
+	_ok(Net.match_started.get_connections().size() >= 1,
+		"opening the lobby subscribes to the match starting (%d listener(s))"
+			% Net.match_started.get_connections().size())
+	menu.call("_close_lobby")
+	_ok(Net.match_started.get_connections().size() == 0,
+		"and backing out of it unsubscribes again")
+	menu.queue_free()
 
 	print("ALL PASSED" if bad == 0 else "%d FAILED" % bad)
 	get_tree().quit(1 if bad > 0 else 0)
