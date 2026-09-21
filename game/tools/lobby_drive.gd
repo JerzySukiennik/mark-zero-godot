@@ -119,14 +119,20 @@ class Watch:
 				if float(lv) > 0.05:
 					fx_lit = true
 
-		if arena_t > 14.0:
+		# LATCH AS SOON AS THE EVIDENCE IS IN, rather than at a fixed time. Both machines
+		# exit when they are done, and whichever finishes first takes its body out of the
+		# other one's world — which is how a passing Spider-Man once got reported as
+		# "never saw the other player's body": it had been there, watched and sampled, and
+		# was freed by the disconnect a second before the deadline.
+		var have: bool = moved and stride_moved and pose_moved \
+			and (fx_lit or not (them is SuitPilot))
+		if (have and arena_t > 5.0) or arena_t > 20.0:
 			print("[%s] body moving across the map: %s" % [mode, moved])
 			print("[%s] walk clock advancing:      %s" % [mode, stride_moved])
 			print("[%s] pose blend changing:       %s" % [mode, pose_moved])
-			var ok := moved and stride_moved and pose_moved
 			if them is SuitPilot:
 				print("[%s] repulsors lit:              %s" % [mode, fx_lit])
-				ok = ok and fx_lit
+			var ok := have
 			print("[%s] RESULT: the remote %s is %s" % [mode, kind,
 				"ANIMATING" if ok else "STILL DEAD"])
 			get_tree().quit(0 if ok else 1)
