@@ -37,6 +37,24 @@ class Watch:
 	var last_pos := Vector3.ZERO
 	var kind := ""
 
+	func _process(d: float) -> void:
+		t += d
+		var scene := get_tree().current_scene
+		var here: String = scene.name if scene != null else "<none>"
+		if int(t) % 5 == 0 and absf(t - roundf(t)) < d:
+			print("[%s] t=%02d scene=%s online=%s players=%d"
+				% [mode, int(t), here, Net.online, Net.players.size()])
+		if here == "Arena":
+			if not probe:
+				print("[%s] RESULT: REACHED THE ARENA after %.1fs" % [mode, t])
+				get_tree().quit(0)
+			_sample(scene, d)
+			return
+		if t > life:
+			print("[%s] RESULT: STILL IN %s AFTER %.0fs — never entered the match"
+				% [mode, here, life])
+			get_tree().quit(1)
+
 	func _mine(scene: Node) -> Node:
 		for c in scene.get_children():
 			if (c is SuitPilot or c is SpiderPilot) and c.get("is_mine"):
