@@ -32,6 +32,7 @@ class Watch:
 	var pose_moved := false
 	var fx_lit := false
 	var last_pose := ""
+	var dumped := false
 
 	func _mine(scene: Node) -> SuitPilot:
 		for c in scene.get_children():
@@ -66,6 +67,19 @@ class Watch:
 
 		var them := _theirs(scene)
 		if them == null:
+			# Say WHAT is in the arena rather than only that the wanted thing is not.
+			if not dumped and arena_t > 3.0:
+				dumped = true
+				var what: Array = []
+				for c in scene.get_children():
+					var mine := ""
+					if c is SuitPilot:
+						mine = " mine=%s peer=%d" % [(c as SuitPilot).is_mine, (c as SuitPilot).peer_id]
+					elif c is SpiderPilot:
+						mine = " mine=%s peer=%d" % [(c as SpiderPilot).is_mine, (c as SpiderPilot).peer_id]
+					what.append("%s(%s)%s" % [c.name, c.get_class(), mine])
+				print("[join] arena holds: ", ", ".join(what))
+				print("[join] roster: ", Net.players, "  my_id=", Net.my_id)
 			if arena_t > 14.0:
 				print("[join] RESULT: NEVER SAW THE OTHER PLAYER'S SUIT")
 				get_tree().quit(1)
