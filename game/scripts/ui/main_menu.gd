@@ -147,17 +147,34 @@ func _open_lobby() -> void:
 	_layer.add_child(_lobby)
 	_lobby.back.connect(_close_lobby)
 	_lobby.start_requested.connect(_start)
+	# SUBSCRIBED THE MOMENT THE LOBBY OPENS, not when START is pressed.
+	#
+	# This used to live inside _start(), which runs only on the machine that pressed START
+	# MATCH — and only the host ever presses it; every other player's lobby says "waiting
+	# for the host". So the host's own scene change worked, the RPC arrived on the client,
+	# Net emitted match_started, and on the client NOTHING was listening to it. The client
+	# sat in the lobby forever while the host dropped into the arena alone. Jurek: "jak
+	# zaczynam grę z hosta to nie dołącza mi gracza."
+	#
+	# Everyone sitting in the lobby is waiting for the same event, so everyone listens for
+	# it from the moment they are in the lobby.
+	if not Net.match_started.is_connected(_enter):
+		Net.match_started.connect(_enter, CONNECT_ONE_SHOT)
 
 func _close_lobby() -> void:
 	if _lobby != null and is_instance_valid(_lobby):
 		_lobby.queue_free()
 	_lobby = null
 	_ui.visible = true
+	# Backing out of the lobby means you are no longer waiting for anybody's match.
+	if Net.match_started.is_connected(_enter):
+		Net.match_started.disconnect(_enter)
 
 func _start() -> void:
 	# The host tells everyone at once; solo this is the same call with nothing under it.
 	# It also locks the sides, which is what makes the lobby the only place they are asked.
-	Net.match_started.connect(_enter, CONNECT_ONE_SHOT)
+	# The listener is already in place from _open_lobby — see the note there for why it
+	# cannot be set up here.
 	Net.begin_match()
 
 func _enter() -> void:
