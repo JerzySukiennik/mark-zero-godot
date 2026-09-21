@@ -88,14 +88,19 @@ class Watch:
 			if absf(them.model.stride_phase - stride_seen) > 0.01:
 				stride_moved = true
 			stride_seen = them.model.stride_phase
-		if them.skel != null:
-			var now_pose := str(them.skel.get("blend") if them.skel.get("blend") != null else "")
+		if them.poses != null:
+			# The pose blend lives on Poses, not on the rig. Comparing its printed form is
+			# crude and exactly right for the question being asked: is it changing at all?
+			var now_pose := str(them.poses.blend)
 			if last_pose != "" and now_pose != last_pose:
 				pose_moved = true
 			last_pose = now_pose
 		if them.fx != null:
-			for e in them.fx._emitters:
-				if e.light != null and e.light.light_energy > 0.05:
+			# `_level` is what drive() writes per nozzle — the emitters themselves are
+			# plain dictionaries, so asking one for `.light` throws every frame and takes
+			# the whole sampler down with it.
+			for lv in them.fx._level:
+				if float(lv) > 0.05:
 					fx_lit = true
 		if arena_t > 12.0:
 			print("[join] walk clock advancing: %s" % stride_moved)
