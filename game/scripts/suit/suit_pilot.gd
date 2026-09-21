@@ -324,6 +324,8 @@ func _step_local(delta: float) -> void:
 		aiming = aiming,
 		firing = Pad.pressed("fire_r") or Pad.pressed("fire_l"),
 	}
+	# Kept for publish(): the three stick values a watcher needs to animate this suit.
+	_ride = Vector3(retro, cmd["lateral"], cmd["vertical"])
 	if _stage != null:
 		model.ground_y = _stage.ground_y
 
@@ -534,8 +536,50 @@ func _step_remote(delta: float) -> void:
 	# shot you dodge is a shot you actually dodged.
 	var k := 1.0 - exp(-delta / 0.12)
 	global_position = global_position.lerp(_net_pos, k)
+	if model == null:
+		return
+
+	# THE REMOTE SUIT IS DRIVEN, NOT PUPPETED. Everything below fills in the same fields
+	# the flight model would have set locally, and then the ordinary animation code runs
+	# off them — so a remote armour walks, hovers, folds prone at speed and lights its
+	# repulsors using the identical pose and exhaust code as the one you are flying.
+	model.position = global_position
+	model.basis_ = model.basis_.slerp(_net_basis, k)
+	model.view_basis = model.view_basis.slerp(_net_view, k)
+	model.velocity = model.velocity.lerp(_net_vel, k)
+	model.thrust_mag = lerpf(model.thrust_mag, _net_thrust, k)
+	model.grounded = (_net_flags & 1) != 0
+	model.hover_active = (_net_flags & 8) != 0
+	model.ground_speed = Vector2(model.velocity.x, model.velocity.z).length()
+	# The walk cycle is a CLOCK, not a state: it counts distance travelled, so it can be
+	# advanced from the velocity we were sent and never needs to cross the network.
+	if model.grounded and model.ground_speed > 0.05:
+		model.stride_phase += model.ground_speed * delta / maxf(0.01,
+			FlightModel.stride_len(model.ground_speed, model.spec.top_speed))
+
 	if rig != null:
-		rig.basis = rig.basis.slerp(_net_basis, k)
+		rig.position = Vector3(0, -FEET_DROP, 0)
+		rig.basis = model.view_basis
+
+	var cmd := {
+		retro = _net_ride.x,
+		lateral = _net_ride.y,
+		vertical = _net_ride.z,
+		look = Vector2.ZERO,
+		firing = (_net_flags & 2) != 0,
+		aiming = (_net_flags & 4) != 0,
+	}
+	if skel != null and poses != null:
+		poses.update(delta, model, cmd, skel)
+		skel.update_pose(delta)
+	if fx != null:
+		var hold: float = model.thrust_mag if model.hover_active else 0.0
+		fx.drive(delta, model.thrust_mag, cmd["lateral"], cmd["vertical"], cmd["retro"], hold)
+	if trail != null:
+		trail.update(delta, model.position - Vector3(0, FEET_DROP * 0.8, 0),
+			model.speed, model.speed / 343.0, model.basis_)
+	if armour != null:
+		armour.ground_y = _stage.ground_y if _stage != null else 0.0
 
 ## The chase camera. Sits behind and above, and is dragged rather than bolted on: a camera
 ## rigidly attached to the suit turns the world instead of turning the suit, and at speed
@@ -554,16 +598,55 @@ func _drive_camera(delta: float) -> void:
 
 # ---- replication -----------------------------------------------------------------------
 
+## WHAT A REMOTE SUIT NEEDS TO BE ALIVE.
+##
+## This used to send position, rotation and thrust, and the receiving end used the first
+## two. So on the other player's screen the armour slid around the map in whatever pose
+## the rig loaded in, with no walk cycle, no repulsors and no exhaust — Jurek: "u gracza
+## nie widać, że Iron Man chodzi (jak chodzi, to wygląda, jakby latał), nie widać
+## repulsorów, nie ma animacji latania".
+##
+## The animation is NOT published. Publishing poses would mean sending a skeleton sixty
+## times a second to say something the receiver can work out for itself. What goes across
+## is the handful of numbers the pose system and the exhaust actually read, and the remote
+## end then runs the SAME code the local one does. That is also why it stays correct when
+## the poses change: there is one animation pipeline, not two.
+##
+## Two rotations rather than one, because they are genuinely different: `basis_` is where
+## the suit is pointing, which is what the pose system reasons about, and `view_basis` is
+## the body's lean and prone fold on top of it, which is what the model is drawn with.
+## Sending only the first is why a suit at 300 m/s stood bolt upright on the other screen.
 func publish() -> void:
 	if not is_mine or not Net.online:
 		return
-	_sync.rpc(model.position, model.basis_.get_rotation_quaternion(), model.thrust_mag)
+	var flags := 0
+	if model.grounded: flags |= 1
+	if Pad.pressed("fire_r") or Pad.pressed("fire_l"): flags |= 2
+	if Pad.retro() > 0.25: flags |= 4
+	if model.hover_active: flags |= 8
+	_sync.rpc(model.position,
+		model.basis_.get_rotation_quaternion(),
+		model.view_basis.get_rotation_quaternion(),
+		model.thrust_mag, model.velocity, _ride, flags)
+
+## The three stick values the pose system reads, carried as one vector rather than three
+## arguments: retro, lateral, vertical. Written every local step, sent as-is.
+var _ride := Vector3.ZERO
+var _net_vel := Vector3.ZERO
+var _net_view := Basis.IDENTITY
+var _net_ride := Vector3.ZERO
+var _net_flags := 0
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func _sync(p: Vector3, q: Quaternion, th: float) -> void:
+func _sync(p: Vector3, q: Quaternion, qv: Quaternion, th: float, vel: Vector3,
+		ride: Vector3, flags: int) -> void:
 	_net_pos = p
 	_net_basis = Basis(q)
+	_net_view = Basis(qv)
 	_net_thrust = th
+	_net_vel = vel
+	_net_ride = ride
+	_net_flags = flags
 
 ## Hands the menu the room's state. Kept on this side of the line so SuitMenu stays
 ## renderable without a running SceneTree.

@@ -21,6 +21,76 @@ class Watch:
 	var mode := "join"
 	var t := 0.0
 	var life := 60.0
+	## With `anim` on the command line the watcher does not stop at the arena door. The
+	## host walks and then flies its own suit; the joiner measures whether the OTHER
+	## player's armour is animating at all — the walk clock advancing, the pose system
+	## running, the exhaust lit. Those are exactly the three things that were dead.
+	var probe := false
+	var arena_t := 0.0
+	var stride_seen := 0.0
+	var stride_moved := false
+	var pose_moved := false
+	var fx_lit := false
+	var last_pose := ""
+
+	func _mine(scene: Node) -> SuitPilot:
+		for c in scene.get_children():
+			if c is SuitPilot and (c as SuitPilot).is_mine:
+				return c
+		return null
+
+	func _theirs(scene: Node) -> SuitPilot:
+		for c in scene.get_children():
+			if c is SuitPilot and not (c as SuitPilot).is_mine:
+				return c
+		return null
+
+	func _sample(scene: Node, d: float) -> void:
+		arena_t += d
+		if mode == "host":
+			# Walk for three seconds, then take off, so the watcher sees both cases.
+			var me := _mine(scene)
+			if me != null and me.model != null:
+				if arena_t < 3.0:
+					me.model.grounded = true
+					me.model.velocity = me.model.basis_ * Vector3(0, 0, -4.0)
+				else:
+					me.model.grounded = false
+					me.model.velocity = me.model.basis_ * Vector3(0, 2.0, -40.0)
+					me.model.thrust_mag = 0.8
+					me.model.hover_active = false
+			if arena_t > 12.0:
+				print("[host] done flying")
+				get_tree().quit(0)
+			return
+
+		var them := _theirs(scene)
+		if them == null:
+			if arena_t > 14.0:
+				print("[join] RESULT: NEVER SAW THE OTHER PLAYER'S SUIT")
+				get_tree().quit(1)
+			return
+		if them.model != null:
+			if absf(them.model.stride_phase - stride_seen) > 0.01:
+				stride_moved = true
+			stride_seen = them.model.stride_phase
+		if them.skel != null:
+			var now_pose := str(them.skel.get("blend") if them.skel.get("blend") != null else "")
+			if last_pose != "" and now_pose != last_pose:
+				pose_moved = true
+			last_pose = now_pose
+		if them.fx != null:
+			for e in them.fx._emitters:
+				if e.light != null and e.light.light_energy > 0.05:
+					fx_lit = true
+		if arena_t > 12.0:
+			print("[join] walk clock advancing: %s" % stride_moved)
+			print("[join] pose blend changing:  %s" % pose_moved)
+			print("[join] repulsors lit:        %s" % fx_lit)
+			var ok := stride_moved and pose_moved and fx_lit
+			print("[join] RESULT: %s" % ("THE OTHER SUIT IS ANIMATING" if ok
+				else "THE OTHER SUIT IS STILL DEAD"))
+			get_tree().quit(0 if ok else 1)
 	func _process(d: float) -> void:
 		t += d
 		var scene := get_tree().current_scene
@@ -29,8 +99,11 @@ class Watch:
 			print("[%s] t=%02d scene=%s online=%s players=%d"
 				% [mode, int(t), here, Net.online, Net.players.size()])
 		if here == "Arena":
-			print("[%s] RESULT: REACHED THE ARENA after %.1fs" % [mode, t])
-			get_tree().quit(0)
+			if not probe:
+				print("[%s] RESULT: REACHED THE ARENA after %.1fs" % [mode, t])
+				get_tree().quit(0)
+			_sample(scene, d)
+			return
 		if t > life:
 			print("[%s] RESULT: STILL IN %s AFTER %.0fs — never entered the match"
 				% [mode, here, life])
@@ -52,6 +125,8 @@ func _ready() -> void:
 	var w := Watch.new()
 	w.name = "Watch"
 	w.mode = _mode
+	w.probe = "anim" in a
+	w.life = 90.0 if w.probe else 60.0
 	get_tree().root.call_deferred("add_child", w)
 	_menu = load("res://scenes/ui/main_menu.tscn").instantiate()
 	add_child(_menu)
