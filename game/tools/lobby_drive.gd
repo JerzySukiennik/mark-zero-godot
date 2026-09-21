@@ -70,13 +70,27 @@ class Watch:
 	## Both machines do the SAME thing: move their own body and measure the other one.
 	## One run therefore tests replication in both directions, which matters because the
 	## armour and Spider-Man are separate implementations that failed separately.
+	## One place that reports, whether the body is still in front of us or has just been
+	## freed by the other machine finishing first.
+	func _verdict(them) -> void:
+		var suit: bool = them is SuitPilot or (them == null and kind == "IRON MAN")
+		print("[%s] body moving across the map: %s" % [mode, moved])
+		print("[%s] walk clock advancing:      %s" % [mode, stride_moved])
+		print("[%s] pose blend changing:       %s" % [mode, pose_moved])
+		if suit:
+			print("[%s] repulsors lit:              %s" % [mode, fx_lit])
+		var ok: bool = moved and stride_moved and pose_moved and (fx_lit or not suit)
+		print("[%s] RESULT: the remote %s is %s" % [mode, kind,
+			"ANIMATING" if ok else "STILL DEAD"])
+		get_tree().quit(0 if ok else 1)
+
 	func _sample(scene: Node, d: float) -> void:
 		arena_t += d
 		var me := _mine(scene)
 		if me != null and me.model != null:
 			# Walk for three seconds, then leave the ground, so the watcher on the other
 			# machine sees both a stride and an airborne pose.
-			if arena_t < 3.0:
+			if arena_t < 8.0:
 				me.model.grounded = true
 				me.model.velocity = me.model.basis_ * Vector3(0, 0, -4.0)
 			else:
@@ -87,6 +101,13 @@ class Watch:
 
 		var them := _theirs(scene)
 		if them == null:
+			# IF IT WAS EVER THERE, REPORT WHAT WAS MEASURED. Saying "never saw the other
+			# player\'s body" about a body that was watched and sampled for seconds, and
+			# then freed when the other machine finished first, is the harness lying about
+			# the thing it exists to observe.
+			if kind != "" and arena_t > 6.0:
+				_verdict(null)
+				return
 			if not dumped and arena_t > 3.0:
 				dumped = true
 				var what: Array = []
@@ -126,16 +147,8 @@ class Watch:
 		# was freed by the disconnect a second before the deadline.
 		var have: bool = moved and stride_moved and pose_moved \
 			and (fx_lit or not (them is SuitPilot))
-		if (have and arena_t > 5.0) or arena_t > 20.0:
-			print("[%s] body moving across the map: %s" % [mode, moved])
-			print("[%s] walk clock advancing:      %s" % [mode, stride_moved])
-			print("[%s] pose blend changing:       %s" % [mode, pose_moved])
-			if them is SuitPilot:
-				print("[%s] repulsors lit:              %s" % [mode, fx_lit])
-			var ok := have
-			print("[%s] RESULT: the remote %s is %s" % [mode, kind,
-				"ANIMATING" if ok else "STILL DEAD"])
-			get_tree().quit(0 if ok else 1)
+		if (have and arena_t > 9.0) or arena_t > 26.0:
+			_verdict(them)
 
 var _menu: Node
 var _lob: Node
